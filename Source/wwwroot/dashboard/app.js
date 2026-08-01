@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const fa = n => new Intl.NumberFormat('fa-IR').format(n || 0);
-let timer;`nlet currentPage = 1;`nconst callPageSize = 50;
+let timer;
+let currentPage = 1;
+const callPageSize = 50;
 
 const extensionNames = {
   "201":"مجید","202":"مجید","203":"شافوری","204":"شافوری","205":"ایلیا","206":"ایلیا",
