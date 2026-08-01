@@ -1,10 +1,10 @@
-﻿using DigiAhan.CDR.Receiver.Logging;
+using DigiAhan.CDR.Receiver.Logging;
 using DigiAhan.CDR.Receiver.Models;
 using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using System.Text.Json.Serialization;
 
-const string AppVersion = "3.2.0";
+const string AppVersion = "3.3.0";
 const string BuildDate = "2026-08-01";
 
 var builder = WebApplication.CreateBuilder(args);

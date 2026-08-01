@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const fa = n => new Intl.NumberFormat('fa-IR').format(n || 0);
-let timer;
+let timer;`nlet currentPage = 1;`nconst callPageSize = 50;
 
 const extensionNames = {
   "201":"مجید","202":"مجید","203":"شافوری","204":"شافوری","205":"ایلیا","206":"ایلیا",
@@ -96,7 +96,7 @@ async function load() {
         hourly: get(`/api/dashboard/hourly?${base}`),
         daily: get(`/api/dashboard/daily?${base}`),
         extensions: get(`/api/dashboard/extensions?startDate=${encodeURIComponent($('startDate').value)}&endDate=${encodeURIComponent($('endDate').value)}`),
-        calls: get(`/api/dashboard/calls?${base}&search=${encodeURIComponent($('search').value)}&status=${$('status').value}&pageSize=100`),
+        calls: get(`/api/dashboard/calls?${base}&search=${encodeURIComponent($('search').value)}&status=${$('status').value}&page=${currentPage}&pageSize=${callPageSize}`),
         sync: get('/api/dashboard/sync'),
         version: get('/api/version')
     };
@@ -161,7 +161,7 @@ async function load() {
 
     if (data.calls) {
         const calls = data.calls;
-        $('callCount').textContent = fa(calls.total) + ' ردیف CDR';
+        $('callCount').textContent = fa(calls.total) + ' تماس یکتا';
         $('callRows').innerHTML = calls.items.length
             ? calls.items.map(x => `<tr class="${x.isNewCustomer ? 'new-customer-row' : ''}">
                 <td>${dt(x.calldate)}</td><td><b>${esc(x.src || '—')}</b></td><td>${esc(x.dst || '—')}</td>
@@ -211,7 +211,7 @@ $('startDate').onchange = () => document.querySelectorAll('.period').forEach(x =
 $('endDate').onchange = () => document.querySelectorAll('.period').forEach(x => x.classList.remove('active'));
 $('search').oninput = () => {
     clearTimeout(timer);
-    timer = setTimeout(load, 450);
+    timer = setTimeout(() => { currentPage = 1; load(); }, 450);
 };
 
 const today = new Date();
