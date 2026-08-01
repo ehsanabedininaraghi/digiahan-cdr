@@ -1,0 +1,33 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore Source/DigiAhan.CDR.Receiver.csproj
+      - name: Build
+        run: dotnet build Source/DigiAhan.CDR.Receiver.csproj -c Release --no-restore
+      - name: Publish
+        run: dotnet publish Source/DigiAhan.CDR.Receiver.csproj -c Release -o artifact/publish
+      - name: Include database and docs
+        shell: pwsh
+        run: |
+          Copy-Item Database artifact/Database -Recurse
+          Copy-Item Docs artifact/Docs -Recurse
+          Copy-Item Source/appsettings.example.json artifact/publish/appsettings.example.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digiahan-cdr-receiver-${{ github.sha }}
+          path: artifact

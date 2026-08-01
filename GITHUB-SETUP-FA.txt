@@ -1,0 +1,12 @@
+راه‌اندازی مخزن خصوصی GitHub
+
+1) این پوشه را روی کامپیوتر دفتر Extract کنید.
+2) PowerShell را در همین پوشه باز کنید.
+3) فقط این دستور را اجرا کنید:
+
+powershell -ExecutionPolicy Bypass -File .\scripts\01-Create-GitHub-Repo.ps1
+
+اسکریپت در صورت نیاز GitHub CLI را نصب می‌کند، ورود GitHub را باز می‌کند، یک Repository خصوصی با نام digiahan-cdr-receiver می‌سازد و نسخه v3.1.0 را Push می‌کند.
+
+نکته امنیتی:
+appsettings.json و ApiToken داخل GitHub نمی‌روند. فایل appsettings.example.json فقط نمونه بدون رمز است.
