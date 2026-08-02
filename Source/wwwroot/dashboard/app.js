@@ -18,6 +18,20 @@ function localIso(d) {
     return `${year}-${month}-${day}`;
 }
 
+function money(v) {
+    const n = Number(v || 0);
+    if (Math.abs(n) >= 1e12) return `${fa((n / 1e12).toFixed(2))} تریلیون`;
+    if (Math.abs(n) >= 1e9) return `${fa((n / 1e9).toFixed(2))} میلیارد`;
+    if (Math.abs(n) >= 1e6) return `${fa((n / 1e6).toFixed(1))} میلیون`;
+    return fa(Math.round(n));
+}
+
+function accountingRole(role, active) {
+    if (!active) return 'غیرفعال';
+    if (role === 'COLLECTIONS') return 'مطالبات / مالی';
+    if (role === 'SHARED') return 'بین‌دفتری';
+    return 'فروش';
+}
 function sec(v) {
     v = Number(v || 0);
     const h = Math.floor(v / 3600);
@@ -100,7 +114,10 @@ async function load() {
         extensions: get(`/api/dashboard/extensions?startDate=${encodeURIComponent($('startDate').value)}&endDate=${encodeURIComponent($('endDate').value)}`),
         calls: get(`/api/dashboard/calls?${base}&search=${encodeURIComponent($('search').value)}&status=${$('status').value}&page=${currentPage}&pageSize=${callPageSize}`),
         sync: get('/api/dashboard/sync'),
-        version: get('/api/version')
+        version: get('/api/version'),
+        salesSummary: get('/api/sales/summary'),
+        salesVisitors: get('/api/sales/by-visitor'),
+        salesInvoices: get('/api/sales/recent-invoices?take=25')
     };
 
     $('rangeCaption').textContent = `گزارش از ${dateOnly($('startDate').value)} تا ${dateOnly($('endDate').value)}${$('extension').value !== 'all' ? ` برای داخلی ${$('extension').value}` : ''}`;
@@ -197,6 +214,47 @@ async function load() {
     }
 
     if (failed.length) toast(`خطا در بخش: ${failed.join('، ')}`);
+
+    if (data.salesSummary) {
+        const s = data.salesSummary;
+        $('salesTotal').textContent = money(s.totalSales);
+        $('salesInvoices').textContent = fa(s.invoiceCount);
+        $('salesCustomers').textContent = fa(s.customerCount);
+        $('salesAverage').textContent = money(s.averageInvoice);
+        $('salesCaption').textContent = `منبع: ${s.sourceDatabase} | سال مالی ${fa(s.fiscalYear)} | ${fa(s.invoiceCount)} فاکتور`;
+
+        const ok = s.connected && s.lastSyncStatus === 'SUCCESS';
+        $('accountingSyncDot').style.background = ok ? '#38d39f' : '#df5c61';
+        $('accountingSyncText').textContent = ok ? 'حسابداری متصل' : 'حسابداری متصل نیست';
+        $('accountingSyncTime').textContent = s.lastSyncAtUtc
+            ? `آخرین همگام‌سازی: ${dt(s.lastSyncAtUtc)}`
+            : 'همگام‌سازی موفق ثبت نشده';
+    }
+
+    if (data.salesVisitors) {
+        $('salesVisitorRows').innerHTML = data.salesVisitors.length
+            ? data.salesVisitors.map(x => `<tr class="${x.isActive ? '' : 'inactive-row'}">
+                <td><b>${esc(x.visitorName)}</b></td>
+                <td>${accountingRole(x.roleType, x.isActive)}</td>
+                <td>${fa(x.invoiceCount)}</td>
+                <td>${money(x.totalSales)}</td>
+                <td>${money(x.averageInvoice)}</td>
+              </tr>`).join('')
+            : '<tr><td colspan="5">داده فروشنده‌ای وجود ندارد</td></tr>';
+    }
+
+    if (data.salesInvoices) {
+        $('salesInvoiceRows').innerHTML = data.salesInvoices.length
+            ? data.salesInvoices.map(x => `<tr>
+                <td>${esc(x.factorDate || '—')}</td>
+                <td>${x.factorNumber ? fa(x.factorNumber) : fa(x.factorCode)}</td>
+                <td><b>${esc(x.customerName || 'بدون نام')}</b><small>${esc(x.customerDetailCode || '')}</small></td>
+                <td>${esc(x.visitorName || 'نامشخص')}</td>
+                <td>${fa(x.itemCount)}</td>
+                <td><b>${money(x.amount)}</b></td>
+              </tr>`).join('')
+            : '<tr><td colspan="6">فاکتوری وجود ندارد</td></tr>';
+    }
 }
 
 function toast(text) {

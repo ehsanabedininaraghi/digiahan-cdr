@@ -4,10 +4,14 @@ using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using System.Text.Json.Serialization;
 
-const string AppVersion = "3.3.1";
-const string BuildDate = "2026-08-01";
+const string AppVersion = "3.4.1";
+const string BuildDate = "2026-08-02";
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(
+    "appsettings.Accounting.local.json",
+    optional: true,
+    reloadOnChange: true);
 
 var configuredLogPath = builder.Configuration["Logging:FileDirectory"] ?? "Logs";
 var logPath = Path.IsPathRooted(configuredLogPath)
@@ -26,6 +30,8 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddSingleton<SqlQueryStore>();
 builder.Services.AddSingleton<SqlCdrRepository>();
 builder.Services.AddSingleton<DashboardRepository>();
+builder.Services.AddSingleton<SalesDashboardRepository>();
+builder.Services.AddSingleton<AccountingSyncService>();
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -113,6 +119,38 @@ app.MapGet("/api/dashboard/calls", async (DateTime? startDate, DateTime? endDate
     return Results.Ok(await repo.Calls(start, end, extension, search, status, page ?? 1, pageSize ?? 50, ct));
 });
 app.MapGet("/api/dashboard/sync", async (DashboardRepository repo, CancellationToken ct) => Results.Ok(await repo.Sync(ct)));
+
+app.MapGet("/api/sales/summary", async (
+    SalesDashboardRepository repo,
+    CancellationToken ct) =>
+    Results.Ok(await repo.Summary(ct)));
+
+app.MapGet("/api/sales/by-visitor", async (
+    SalesDashboardRepository repo,
+    CancellationToken ct) =>
+    Results.Ok(await repo.ByVisitor(ct)));
+
+app.MapGet("/api/sales/recent-invoices", async (
+    int? take,
+    SalesDashboardRepository repo,
+    CancellationToken ct) =>
+    Results.Ok(await repo.RecentInvoices(take ?? 25, ct)));
+
+app.MapGet("/api/accounting/status", async (
+    AccountingSyncService service,
+    CancellationToken ct) =>
+    Results.Ok(await service.GetStatusAsync(ct)));
+
+app.MapPost("/api/accounting/sync", async (
+    int? days,
+    AccountingSyncService service,
+    CancellationToken ct) =>
+{
+    var result = await service.SyncAsync(days ?? 30, ct);
+    return result.Status == "SUCCESS"
+        ? Results.Ok(result)
+        : Results.Json(result, statusCode: StatusCodes.Status500InternalServerError);
+});
 
 app.MapPost("/api/cdr", async (
     HttpRequest httpRequest,
