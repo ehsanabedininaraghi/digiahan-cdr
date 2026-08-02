@@ -22,3 +22,8 @@ Thumbs.db
 .DS_Store
 .vscode/
 .idea/
+
+# Local accounting credentials
+Source/appsettings.Accounting.local.json
+
+Source/appsettings.Voip.local.json

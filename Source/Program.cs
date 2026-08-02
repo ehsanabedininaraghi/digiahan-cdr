@@ -4,10 +4,11 @@ using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using System.Text.Json.Serialization;
 
-const string AppVersion = "3.4.1";
+const string AppVersion = "3.5.0";
 const string BuildDate = "2026-08-02";
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
     optional: true,
@@ -30,6 +31,8 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddSingleton<SqlQueryStore>();
 builder.Services.AddSingleton<SqlCdrRepository>();
 builder.Services.AddSingleton<DashboardRepository>();
+builder.Services.AddSingleton<AgentEventStore>();
+builder.Services.AddSingleton<CustomerIntelligenceRepository>();
 builder.Services.AddSingleton<SalesDashboardRepository>();
 builder.Services.AddSingleton<AccountingSyncService>();
 
@@ -93,6 +96,37 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
+app.MapGet("/agent/{extension}", (string extension) =>
+    Results.Redirect($"/agent/index.html?extension={Uri.EscapeDataString(extension)}"));
+
+app.MapPost("/api/voip/events", async (
+    HttpRequest http,
+    VoipRingEventRequest request,
+    IConfiguration configuration,
+    CustomerIntelligenceRepository repository,
+    AgentEventStore store,
+    CancellationToken ct) =>
+{
+    var expected = configuration["Voip:ApiToken"];
+    var supplied = http.Headers["X-Voip-Token"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(expected) || supplied != expected)
+        return Results.Unauthorized();
+
+    if (string.IsNullOrWhiteSpace(request.Extension) ||
+        string.IsNullOrWhiteSpace(request.CallerNumber))
+        return Results.BadRequest(new { error = "Extension and CallerNumber are required." });
+
+    var card = await repository.BuildCard(request, ct);
+    return Results.Ok(store.Put(request.Extension.Trim(), card));
+});
+
+app.MapGet("/api/agent/{extension}/current", (
+    string extension,
+    AgentEventStore store) =>
+{
+    var current = store.Get(extension.Trim());
+    return current is null ? Results.NoContent() : Results.Ok(current);
+});
 app.MapGet("/api/dashboard/summary", async (DateTime? startDate, DateTime? endDate, string? extension, DashboardRepository repo, CancellationToken ct) =>
 {
     var (start, end) = ResolveRange(startDate, endDate);
