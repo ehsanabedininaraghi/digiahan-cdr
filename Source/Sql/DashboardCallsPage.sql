@@ -39,45 +39,79 @@ Grouped AS
 ),
 Resolved AS
 (
-    SELECT g.*,d.DidarContactCode,d.FullName,d.CompanyName,d.OwnerName,
-           CONVERT(bit,CASE WHEN dbo.NormalizeIranPhone(g.CustomerPhone) IS NOT NULL AND d.DidarContactCode IS NULL THEN 1 ELSE 0 END) AS IsNewCustomer
+    SELECT
+        g.*,
+        d.IdentityId,
+        d.DidarContactCode,
+        d.DisplayName AS FullName,
+        d.CompanyName,
+        d.OwnerName,
+        d.AccountingDetailCode,
+        d.MatchSource,
+        CONVERT(bit,CASE
+            WHEN dbo.NormalizeIranPhone(g.CustomerPhone) IS NOT NULL AND d.IdentityId IS NULL THEN 1
+            ELSE 0
+        END) AS IsNewCustomer
     FROM Grouped g
     OUTER APPLY
     (
-        SELECT TOP(1) dc.DidarContactCode,dc.FullName,dc.CompanyName,dc.OwnerName
-        FROM dbo.DidarContactPhones p
-        INNER JOIN dbo.DidarContacts dc ON dc.DidarContactCode=p.DidarContactCode AND dc.IsDeleted=0
-        WHERE p.NormalizedPhone=dbo.NormalizeIranPhone(g.CustomerPhone)
-        ORDER BY p.IsPrimary DESC,p.Id ASC
+        SELECT TOP(1)
+            IdentityId,DidarContactCode,DisplayName,CompanyName,OwnerName,
+            AccountingDetailCode,MatchSource,IsVerified
+        FROM dbo.CustomerPhoneDirectory
+        WHERE NormalizedPhone=dbo.NormalizeIranPhone(g.CustomerPhone)
+        ORDER BY IsVerified DESC,IdentityId
     ) d
 ),
 Filtered AS
 (
     SELECT * FROM Resolved
-    WHERE (@q=N'' OR CustomerPhone LIKE N'%'+@q+N'%' OR FullName LIKE N'%'+@q+N'%' OR CompanyName LIKE N'%'+@q+N'%' OR OwnerName LIKE N'%'+@q+N'%' OR LinkedId LIKE N'%'+@q+N'%' OR UniqueId LIKE N'%'+@q+N'%' OR AnsweredExtension LIKE N'%'+@q+N'%')
-      AND (@st=N'all' OR (@st=N'answered' AND Answered=1) OR (@st=N'missed' AND Answered=0) OR (@st=N'new' AND IsNewCustomer=1) OR (@st=N'known' AND IsNewCustomer=0 AND DidarContactCode IS NOT NULL))
-)
-,
+    WHERE
+        (
+            @q=N''
+            OR CustomerPhone LIKE N'%'+@q+N'%'
+            OR FullName LIKE N'%'+@q+N'%'
+            OR CompanyName LIKE N'%'+@q+N'%'
+            OR OwnerName LIKE N'%'+@q+N'%'
+            OR AccountingDetailCode LIKE N'%'+@q+N'%'
+            OR LinkedId LIKE N'%'+@q+N'%'
+            OR UniqueId LIKE N'%'+@q+N'%'
+            OR AnsweredExtension LIKE N'%'+@q+N'%'
+        )
+      AND
+        (
+            @st=N'all'
+            OR (@st=N'answered' AND Answered=1)
+            OR (@st=N'missed' AND Answered=0)
+            OR (@st=N'new' AND IsNewCustomer=1)
+            OR (@st=N'known' AND IsNewCustomer=0 AND IdentityId IS NOT NULL)
+        )
+),
 Paged AS
 (
     SELECT
-        FirstId AS RawCDRId,StartedAt AS Calldate,
+        FirstId AS RawCDRId,
+        StartedAt AS Calldate,
         CASE WHEN Direction=N'outbound' THEN AnsweredExtension ELSE CustomerPhone END AS Src,
         CASE WHEN Direction=N'inbound' THEN AnsweredExtension ELSE CustomerPhone END AS Dst,
         Direction,
         CASE WHEN Answered=1 THEN N'ANSWERED' ELSE N'NO ANSWER' END AS Disposition,
         Duration,Billsec,RecordingFile,LinkedId,UniqueId,Did,Dcontext,CustomerPhone,
         CASE
-            WHEN DidarContactCode IS NOT NULL AND NULLIF(LTRIM(RTRIM(FullName)),N'') IS NOT NULL THEN FullName
-            WHEN DidarContactCode IS NOT NULL AND NULLIF(LTRIM(RTRIM(CompanyName)),N'') IS NOT NULL THEN CompanyName
-            WHEN DidarContactCode IS NOT NULL THEN N'مخاطب دیدار'
+            WHEN IdentityId IS NOT NULL AND NULLIF(LTRIM(RTRIM(FullName)),N'') IS NOT NULL THEN FullName
+            WHEN IdentityId IS NOT NULL AND NULLIF(LTRIM(RTRIM(CompanyName)),N'') IS NOT NULL THEN CompanyName
+            WHEN IdentityId IS NOT NULL THEN N'مشتری شناسایی‌شده'
             WHEN dbo.NormalizeIranPhone(CustomerPhone) IS NOT NULL THEN N'مشتری جدید'
-            ELSE NULL END AS CustomerName,
+            ELSE NULL
+        END AS CustomerName,
         CompanyName,OwnerName,DidarContactCode,IsNewCustomer,
         ROW_NUMBER() OVER(ORDER BY StartedAt DESC,FirstId DESC) AS RowNum
     FROM Filtered
 )
-SELECT RawCDRId,Calldate,Src,Dst,Direction,Disposition,Duration,Billsec,RecordingFile,LinkedId,UniqueId,Did,Dcontext,CustomerPhone,CustomerName,CompanyName,OwnerName,DidarContactCode,IsNewCustomer
+SELECT
+    RawCDRId,Calldate,Src,Dst,Direction,Disposition,Duration,Billsec,
+    RecordingFile,LinkedId,UniqueId,Did,Dcontext,CustomerPhone,
+    CustomerName,CompanyName,OwnerName,DidarContactCode,IsNewCustomer
 FROM Paged
 WHERE RowNum BETWEEN @rowStart AND @rowEnd
 ORDER BY RowNum;

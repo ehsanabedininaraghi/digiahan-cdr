@@ -223,12 +223,33 @@ async function load() {
         $('salesAverage').textContent = money(s.averageInvoice);
         $('salesCaption').textContent = `منبع: ${s.sourceDatabase} | سال مالی ${fa(s.fiscalYear)} | ${fa(s.invoiceCount)} فاکتور`;
 
-        const ok = s.connected && s.lastSyncStatus === 'SUCCESS';
-        $('accountingSyncDot').style.background = ok ? '#38d39f' : '#df5c61';
-        $('accountingSyncText').textContent = ok ? 'حسابداری متصل' : 'حسابداری متصل نیست';
-        $('accountingSyncTime').textContent = s.lastSyncAtUtc
-            ? `آخرین همگام‌سازی: ${dt(s.lastSyncAtUtc)}`
+        const hasAccountingData = Number(s.invoiceCount || 0) > 0;
+        const latestSyncSucceeded = s.lastSyncStatus === 'SUCCESS';
+        const latestFactorDate = data.salesInvoices && data.salesInvoices.length
+            ? data.salesInvoices[0].factorDate
+            : null;
+
+        if (s.connected && latestSyncSucceeded) {
+            $('accountingSyncDot').style.background = '#38d39f';
+            $('accountingSyncText').textContent = 'حسابداری همگام است';
+        } else if (hasAccountingData) {
+            $('accountingSyncDot').style.background = '#f0b44d';
+            $('accountingSyncText').textContent = latestSyncSucceeded
+                ? 'داده حسابداری موجود است'
+                : 'داده موجود است؛ آخرین تلاش همگام‌سازی ناموفق بوده';
+        } else {
+            $('accountingSyncDot').style.background = '#df5c61';
+            $('accountingSyncText').textContent = 'داده حسابداری موجود نیست';
+        }
+
+        const successfulSyncText = s.lastSyncAtUtc
+            ? `آخرین همگام‌سازی موفق: ${dt(s.lastSyncAtUtc)}`
             : 'همگام‌سازی موفق ثبت نشده';
+        const factorText = latestFactorDate
+            ? `آخرین فاکتور واردشده: ${latestFactorDate}`
+            : 'فاکتور واردشده‌ای وجود ندارد';
+
+        $('accountingSyncTime').textContent = `${successfulSyncText} | ${factorText}`;
     }
 
     if (data.salesVisitors) {

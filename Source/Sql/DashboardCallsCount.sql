@@ -39,22 +39,51 @@ Grouped AS
 ),
 Resolved AS
 (
-    SELECT g.*,d.DidarContactCode,d.FullName,d.CompanyName,d.OwnerName,
-           CONVERT(bit,CASE WHEN dbo.NormalizeIranPhone(g.CustomerPhone) IS NOT NULL AND d.DidarContactCode IS NULL THEN 1 ELSE 0 END) AS IsNewCustomer
+    SELECT
+        g.*,
+        d.IdentityId,
+        d.DidarContactCode,
+        d.DisplayName AS FullName,
+        d.CompanyName,
+        d.OwnerName,
+        d.AccountingDetailCode,
+        CONVERT(bit,CASE
+            WHEN dbo.NormalizeIranPhone(g.CustomerPhone) IS NOT NULL AND d.IdentityId IS NULL THEN 1
+            ELSE 0
+        END) AS IsNewCustomer
     FROM Grouped g
     OUTER APPLY
     (
-        SELECT TOP(1) dc.DidarContactCode,dc.FullName,dc.CompanyName,dc.OwnerName
-        FROM dbo.DidarContactPhones p
-        INNER JOIN dbo.DidarContacts dc ON dc.DidarContactCode=p.DidarContactCode AND dc.IsDeleted=0
-        WHERE p.NormalizedPhone=dbo.NormalizeIranPhone(g.CustomerPhone)
-        ORDER BY p.IsPrimary DESC,p.Id ASC
+        SELECT TOP(1)
+            IdentityId,DidarContactCode,DisplayName,CompanyName,OwnerName,
+            AccountingDetailCode,IsVerified
+        FROM dbo.CustomerPhoneDirectory
+        WHERE NormalizedPhone=dbo.NormalizeIranPhone(g.CustomerPhone)
+        ORDER BY IsVerified DESC,IdentityId
     ) d
 ),
 Filtered AS
 (
     SELECT * FROM Resolved
-    WHERE (@q=N'' OR CustomerPhone LIKE N'%'+@q+N'%' OR FullName LIKE N'%'+@q+N'%' OR CompanyName LIKE N'%'+@q+N'%' OR OwnerName LIKE N'%'+@q+N'%' OR LinkedId LIKE N'%'+@q+N'%' OR UniqueId LIKE N'%'+@q+N'%' OR AnsweredExtension LIKE N'%'+@q+N'%')
-      AND (@st=N'all' OR (@st=N'answered' AND Answered=1) OR (@st=N'missed' AND Answered=0) OR (@st=N'new' AND IsNewCustomer=1) OR (@st=N'known' AND IsNewCustomer=0 AND DidarContactCode IS NOT NULL))
+    WHERE
+        (
+            @q=N''
+            OR CustomerPhone LIKE N'%'+@q+N'%'
+            OR FullName LIKE N'%'+@q+N'%'
+            OR CompanyName LIKE N'%'+@q+N'%'
+            OR OwnerName LIKE N'%'+@q+N'%'
+            OR AccountingDetailCode LIKE N'%'+@q+N'%'
+            OR LinkedId LIKE N'%'+@q+N'%'
+            OR UniqueId LIKE N'%'+@q+N'%'
+            OR AnsweredExtension LIKE N'%'+@q+N'%'
+        )
+      AND
+        (
+            @st=N'all'
+            OR (@st=N'answered' AND Answered=1)
+            OR (@st=N'missed' AND Answered=0)
+            OR (@st=N'new' AND IsNewCustomer=1)
+            OR (@st=N'known' AND IsNewCustomer=0 AND IdentityId IS NOT NULL)
+        )
 )
 SELECT COUNT(*) AS Total FROM Filtered;

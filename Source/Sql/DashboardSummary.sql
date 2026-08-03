@@ -2,9 +2,9 @@
 (
     SELECT
         r.*,
-        K = COALESCE(NULLIF(r.LinkedId,N''), NULLIF(r.UniqueId,N''), CONVERT(nvarchar(30),r.RawCDRId))
+        K=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
     FROM dbo.RawCDR r
-    WHERE r.Calldate >= @s AND r.Calldate < @e
+    WHERE r.Calldate>=@s AND r.Calldate<@e
 ),
 EligibleKeys AS
 (
@@ -15,23 +15,19 @@ EligibleKeys AS
 C AS
 (
     SELECT
-        r.K,
-        r.Calldate,
-        r.ReceivedAtUtc,
-        r.Disposition,
-        r.Billsec,
-        Dir = CASE
+        r.K,r.Calldate,r.ReceivedAtUtc,r.Disposition,r.Billsec,
+        Dir=CASE
             WHEN NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%' THEN N'in'
             WHEN r.Dcontext LIKE N'%from-internal%' OR r.Dcontext LIKE N'%outbound%' THEN N'out'
             ELSE N'u'
         END,
-        ExternalPhone = CASE
+        ExternalPhone=CASE
             WHEN (NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%')
-                 AND LEN(ISNULL(r.Src,N'')) > 4 THEN r.Src
+                 AND LEN(ISNULL(r.Src,N''))>4 THEN r.Src
             WHEN (r.Dcontext LIKE N'%from-internal%' OR r.Dcontext LIKE N'%outbound%')
-                 AND LEN(ISNULL(r.Dst,N'')) > 4 THEN r.Dst
-            WHEN LEN(ISNULL(r.Src,N'')) > 4 THEN r.Src
-            WHEN LEN(ISNULL(r.Dst,N'')) > 4 THEN r.Dst
+                 AND LEN(ISNULL(r.Dst,N''))>4 THEN r.Dst
+            WHEN LEN(ISNULL(r.Src,N''))>4 THEN r.Src
+            WHEN LEN(ISNULL(r.Dst,N''))>4 THEN r.Dst
         END
     FROM Raw r
     INNER JOIN EligibleKeys e ON e.K=r.K
@@ -54,18 +50,15 @@ R AS
 (
     SELECT
         O.*,
-        NormalizedPhone = dbo.NormalizeIranPhone(O.ExternalPhone),
-        HasContact = CASE WHEN M.DidarContactCode IS NULL THEN 0 ELSE 1 END
+        NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone),
+        HasContact=CASE WHEN M.IdentityId IS NULL THEN 0 ELSE 1 END
     FROM O
     OUTER APPLY
     (
-        SELECT TOP (1) p.DidarContactCode
-        FROM dbo.DidarContactPhones p
-        INNER JOIN dbo.DidarContacts d
-            ON d.DidarContactCode=p.DidarContactCode
-           AND d.IsDeleted=0
-        WHERE p.NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
-        ORDER BY p.IsPrimary DESC,p.Id ASC
+        SELECT TOP(1) IdentityId,IsVerified
+        FROM dbo.CustomerPhoneDirectory
+        WHERE NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
+        ORDER BY IsVerified DESC,IdentityId
     ) M
 )
 SELECT

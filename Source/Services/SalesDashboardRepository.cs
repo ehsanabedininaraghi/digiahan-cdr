@@ -1,5 +1,7 @@
 ﻿using DigiAhan.CDR.Receiver.Models;
 using Microsoft.Data.SqlClient;
+using System.Data;
+using System.Globalization;
 
 namespace DigiAhan.CDR.Receiver.Services;
 
@@ -15,24 +17,39 @@ public sealed class SalesDashboardRepository
 
     public async Task<SalesDashboardSummary> Summary(CancellationToken ct)
     {
+        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
+
         const string sql = """
-            SELECT
-                CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.AccountingSyncRuns WHERE Status=N'SUCCESS') THEN 1 ELSE 0 END AS bit) AS Connected,
-                (SELECT TOP(1) FinishedAtUtc FROM dbo.AccountingSyncRuns WHERE Status=N'SUCCESS' ORDER BY FinishedAtUtc DESC) AS LastSyncAtUtc,
-                (SELECT TOP(1) Status FROM dbo.AccountingSyncRuns ORDER BY StartedAtUtc DESC) AS LastSyncStatus,
-                COUNT_BIG(*) AS InvoiceCount,
-                COUNT(DISTINCT NULLIF(CustomerDetailCode,N'')) AS CustomerCount,
-                ISNULL(SUM(Amount),0) AS TotalSales,
-                ISNULL(AVG(NULLIF(Amount,0)),0) AS AverageInvoice,
-                COUNT(DISTINCT VisitorId) AS VisitorCount,
-                ISNULL(MAX(SourceDatabase),N'daftar1405') AS SourceDatabase,
-                ISNULL(MAX(FiscalYear),1405) AS FiscalYear
-            FROM dbo.AccountingInvoices;
-            """;
+        SELECT
+            CAST(CASE WHEN EXISTS
+            (
+                SELECT 1 FROM dbo.AccountingSyncRuns WHERE Status=N'SUCCESS'
+            ) THEN 1 ELSE 0 END AS bit) AS Connected,
+
+            (SELECT TOP(1) FinishedAtUtc
+             FROM dbo.AccountingSyncRuns
+             WHERE Status=N'SUCCESS'
+             ORDER BY FinishedAtUtc DESC) AS LastSyncAtUtc,
+
+            (SELECT TOP(1) Status
+             FROM dbo.AccountingSyncRuns
+             ORDER BY StartedAtUtc DESC) AS LastSyncStatus,
+
+            COUNT_BIG(*) AS InvoiceCount,
+            COUNT(DISTINCT NULLIF(CustomerDetailCode,N'')) AS CustomerCount,
+            ISNULL(SUM(Amount),0) AS TotalSales,
+            ISNULL(AVG(NULLIF(Amount,0)),0) AS AverageInvoice,
+            COUNT(DISTINCT VisitorId) AS VisitorCount,
+            ISNULL(MAX(SourceDatabase),N'daftar1405') AS SourceDatabase,
+            ISNULL(MAX(FiscalYear),1405) AS FiscalYear
+        FROM dbo.AccountingInvoices
+        WHERE FactorDate>=@cutoff;
+        """;
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         if (!await reader.ReadAsync(ct))
@@ -53,28 +70,32 @@ public sealed class SalesDashboardRepository
 
     public async Task<IReadOnlyList<SalesByVisitorRow>> ByVisitor(CancellationToken ct)
     {
+        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
+
         const string sql = """
-            SELECT
-                v.VisitorId,
-                ISNULL(NULLIF(v.VisitorName,N''),N'نامشخص') AS VisitorName,
-                ISNULL(v.RoleType,N'SALES') AS RoleType,
-                v.IsActive,
-                COUNT(i.FactorCode) AS InvoiceCount,
-                ISNULL(SUM(i.Amount),0) AS TotalSales,
-                ISNULL(AVG(NULLIF(i.Amount,0)),0) AS AverageInvoice
-            FROM dbo.AccountingVisitors v
-            LEFT JOIN dbo.AccountingInvoices i
-              ON i.SourceDatabase=v.SourceDatabase
-             AND i.FiscalYear=v.FiscalYear
-             AND i.VisitorId=v.VisitorId
-            GROUP BY v.VisitorId,v.VisitorName,v.RoleType,v.IsActive
-            ORDER BY TotalSales DESC, v.VisitorId;
-            """;
+        SELECT
+            v.VisitorId,
+            ISNULL(NULLIF(v.VisitorName,N''),N'نامشخص') AS VisitorName,
+            ISNULL(v.RoleType,N'SALES') AS RoleType,
+            v.IsActive,
+            COUNT(i.FactorCode) AS InvoiceCount,
+            ISNULL(SUM(i.Amount),0) AS TotalSales,
+            ISNULL(AVG(NULLIF(i.Amount,0)),0) AS AverageInvoice
+        FROM dbo.AccountingVisitors v
+        LEFT JOIN dbo.AccountingInvoices i
+          ON i.SourceDatabase=v.SourceDatabase
+         AND i.FiscalYear=v.FiscalYear
+         AND i.VisitorId=v.VisitorId
+         AND i.FactorDate>=@cutoff
+        GROUP BY v.VisitorId,v.VisitorName,v.RoleType,v.IsActive
+        ORDER BY TotalSales DESC,v.VisitorId;
+        """;
 
         var result = new List<SalesByVisitorRow>();
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         while (await reader.ReadAsync(ct))
@@ -92,37 +113,42 @@ public sealed class SalesDashboardRepository
         return result;
     }
 
-    public async Task<IReadOnlyList<RecentInvoiceRow>> RecentInvoices(int take, CancellationToken ct)
+    public async Task<IReadOnlyList<RecentInvoiceRow>> RecentInvoices(
+        int take,
+        CancellationToken ct)
     {
-        take = Math.Clamp(take, 1, 100);
+        take = Math.Clamp(take,1,100);
+        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
 
         const string sql = """
-            SELECT TOP(@take)
-                i.FactorCode,
-                i.FactorNumber,
-                i.FactorDate,
-                i.CustomerDetailCode,
-                i.CustomerName,
-                ISNULL(i.Amount,0) AS Amount,
-                i.VisitorId,
-                i.VisitorName,
-                COUNT(ii.ItemCode) AS ItemCount
-            FROM dbo.AccountingInvoices i
-            LEFT JOIN dbo.AccountingInvoiceItems ii
-              ON ii.SourceDatabase=i.SourceDatabase
-             AND ii.FiscalYear=i.FiscalYear
-             AND ii.FactorCode=i.FactorCode
-            GROUP BY
-                i.FactorCode,i.FactorNumber,i.FactorDate,i.CustomerDetailCode,
-                i.CustomerName,i.Amount,i.VisitorId,i.VisitorName
-            ORDER BY i.FactorDate DESC,i.FactorCode DESC;
-            """;
+        SELECT TOP(@take)
+            i.FactorCode,
+            i.FactorNumber,
+            i.FactorDate,
+            i.CustomerDetailCode,
+            i.CustomerName,
+            ISNULL(i.Amount,0) AS Amount,
+            i.VisitorId,
+            i.VisitorName,
+            COUNT(ii.ItemCode) AS ItemCount
+        FROM dbo.AccountingInvoices i
+        LEFT JOIN dbo.AccountingInvoiceItems ii
+          ON ii.SourceDatabase=i.SourceDatabase
+         AND ii.FiscalYear=i.FiscalYear
+         AND ii.FactorCode=i.FactorCode
+        WHERE i.FactorDate>=@cutoff
+        GROUP BY
+            i.FactorCode,i.FactorNumber,i.FactorDate,i.CustomerDetailCode,
+            i.CustomerName,i.Amount,i.VisitorId,i.VisitorName
+        ORDER BY i.FactorDate DESC,i.FactorCode DESC;
+        """;
 
         var result = new List<RecentInvoiceRow>();
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@take", take);
+        command.Parameters.Add("@take", SqlDbType.Int).Value = take;
+        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         while (await reader.ReadAsync(ct))
@@ -140,5 +166,11 @@ public sealed class SalesDashboardRepository
         }
 
         return result;
+    }
+
+    private static string ToPersianDate(DateTime date)
+    {
+        var calendar = new PersianCalendar();
+        return $"{calendar.GetYear(date):0000}/{calendar.GetMonth(date):00}/{calendar.GetDayOfMonth(date):00}";
     }
 }

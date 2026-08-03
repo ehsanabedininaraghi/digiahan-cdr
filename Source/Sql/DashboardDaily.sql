@@ -17,8 +17,7 @@ C AS
     SELECT
         r.K,
         D=CONVERT(date,MIN(r.Calldate) OVER(PARTITION BY r.K)),
-        r.Disposition,
-        r.Billsec,
+        r.Disposition,r.Billsec,
         Dir=CASE
             WHEN NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%' THEN N'in'
             WHEN r.Dcontext LIKE N'%from-internal%' OR r.Dcontext LIKE N'%outbound%' THEN N'out'
@@ -53,17 +52,14 @@ R AS
     SELECT
         O.*,
         NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone),
-        HasContact=CASE WHEN M.DidarContactCode IS NULL THEN 0 ELSE 1 END
+        HasContact=CASE WHEN M.IdentityId IS NULL THEN 0 ELSE 1 END
     FROM O
     OUTER APPLY
     (
-        SELECT TOP(1) p.DidarContactCode
-        FROM dbo.DidarContactPhones p
-        INNER JOIN dbo.DidarContacts d
-            ON d.DidarContactCode=p.DidarContactCode
-           AND d.IsDeleted=0
-        WHERE p.NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
-        ORDER BY p.IsPrimary DESC,p.Id ASC
+        SELECT TOP(1) IdentityId,IsVerified
+        FROM dbo.CustomerPhoneDirectory
+        WHERE NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
+        ORDER BY IsVerified DESC,IdentityId
     ) M
 )
 SELECT
