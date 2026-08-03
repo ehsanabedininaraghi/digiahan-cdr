@@ -1,4 +1,4 @@
-﻿namespace DigiAhan.CDR.Receiver.Models;
+namespace DigiAhan.CDR.Receiver.Models;
 
 public sealed record AccountingSyncResult(
     Guid RunId,
@@ -26,4 +26,11 @@ public sealed record AccountingSyncStatus(
     string? SourceServer,
     string? SourceDatabase,
     int? FiscalYear,
-    string? LastError);
+    string? LastError)
+{
+    // Compatibility aliases for dashboard diagnostics and older clients.
+    public string? LastSyncStatus => LastStatus;
+    public int CustomerCount => LastCustomers;
+    public int InvoiceCount => LastInvoices;
+    public int InvoiceItemCount => LastInvoiceItems;
+}
