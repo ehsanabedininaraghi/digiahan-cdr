@@ -1,4 +1,4 @@
-﻿using DigiAhan.CDR.Receiver.Models;
+using DigiAhan.CDR.Receiver.Models;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Text.RegularExpressions;
@@ -7,6 +7,9 @@ namespace DigiAhan.CDR.Receiver.Services;
 
 public sealed class AgentPanelRepository
 {
+    private static readonly SemaphoreSlim SchemaGate = new(1, 1);
+    private static volatile bool _schemaEnsured;
+
     private readonly string _connectionString;
 
     public AgentPanelRepository(IConfiguration configuration)
@@ -17,60 +20,162 @@ public sealed class AgentPanelRepository
 
     public async Task EnsureSchema(CancellationToken ct)
     {
-        const string sql = """
-        IF OBJECT_ID(N'dbo.AgentIncomingEvents',N'U') IS NULL
-        BEGIN
-            CREATE TABLE dbo.AgentIncomingEvents
-            (
-                Id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                Extension nvarchar(10) NOT NULL,
-                CallerNumber nvarchar(32) NOT NULL,
-                LinkedId nvarchar(100) NULL,
-                EventTimeUtc datetime2(0) NOT NULL,
-                CustomerName nvarchar(300) NULL,
-                CompanyName nvarchar(300) NULL,
-                OwnerName nvarchar(200) NULL,
-                IsKnownCustomer bit NOT NULL,
-                CustomerRank nvarchar(10) NOT NULL,
-                Temperature nvarchar(20) NOT NULL,
-                LastInvoiceDate nvarchar(10) NULL,
-                LastInvoiceAmount decimal(19,4) NULL,
-                LastProduct nvarchar(400) NULL,
-                Sales30Days decimal(19,4) NOT NULL,
-                CreatedAtUtc datetime2(0) NOT NULL
-                    CONSTRAINT DF_AgentIncomingEvents_CreatedAtUtc DEFAULT(SYSUTCDATETIME())
-            );
-            CREATE INDEX IX_AgentIncomingEvents_ExtensionCreated
-                ON dbo.AgentIncomingEvents(Extension,CreatedAtUtc DESC);
-            CREATE INDEX IX_AgentIncomingEvents_CallerCreated
-                ON dbo.AgentIncomingEvents(CallerNumber,CreatedAtUtc DESC);
-        END;
+        if (_schemaEnsured)
+            return;
 
-        IF OBJECT_ID(N'dbo.AgentCallOutcomes',N'U') IS NULL
-        BEGIN
-            CREATE TABLE dbo.AgentCallOutcomes
-            (
-                Id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                Extension nvarchar(10) NOT NULL,
-                CallerNumber nvarchar(32) NOT NULL,
-                Outcome nvarchar(30) NOT NULL,
-                Note nvarchar(1000) NULL,
-                FollowUpAt datetime2(0) NULL,
-                LinkedId nvarchar(100) NULL,
-                CreatedAtUtc datetime2(0) NOT NULL
-                    CONSTRAINT DF_AgentCallOutcomes_CreatedAtUtc DEFAULT(SYSUTCDATETIME())
-            );
-            CREATE INDEX IX_AgentCallOutcomes_ExtensionCreated
-                ON dbo.AgentCallOutcomes(Extension,CreatedAtUtc DESC);
-            CREATE INDEX IX_AgentCallOutcomes_CallerCreated
-                ON dbo.AgentCallOutcomes(CallerNumber,CreatedAtUtc DESC);
-        END;
-        """;
+        await SchemaGate.WaitAsync(ct);
+        try
+        {
+            if (_schemaEnsured)
+                return;
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 120 };
-        await command.ExecuteNonQueryAsync(ct);
+            const string sql = """
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @lockResult int;
+            EXEC @lockResult = sys.sp_getapplock
+                @Resource=N'DigiAhan.AgentPanel.Schema.v3.7.6',
+                @LockMode=N'Exclusive',
+                @LockOwner=N'Transaction',
+                @LockTimeout=15000;
+
+            IF @lockResult < 0
+                THROW 51001, N'Agent panel schema lock could not be acquired.', 1;
+
+            IF OBJECT_ID(N'dbo.AgentIncomingEvents',N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.AgentIncomingEvents
+                (
+                    Id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    Extension nvarchar(10) NOT NULL,
+                    CallerNumber nvarchar(32) NOT NULL,
+                    LinkedId nvarchar(100) NULL,
+                    EventTimeUtc datetime2(0) NOT NULL,
+                    CustomerName nvarchar(300) NULL,
+                    CompanyName nvarchar(300) NULL,
+                    OwnerName nvarchar(200) NULL,
+                    IsKnownCustomer bit NOT NULL,
+                    CustomerRank nvarchar(10) NOT NULL,
+                    Temperature nvarchar(20) NOT NULL,
+                    LastInvoiceDate nvarchar(10) NULL,
+                    LastInvoiceAmount decimal(19,4) NULL,
+                    LastProduct nvarchar(400) NULL,
+                    Sales30Days decimal(19,4) NOT NULL
+                        CONSTRAINT DF_AgentIncomingEvents_Sales30Days DEFAULT(0),
+                    CreatedAtUtc datetime2(0) NOT NULL
+                        CONSTRAINT DF_AgentIncomingEvents_CreatedAtUtc DEFAULT(SYSUTCDATETIME())
+                );
+            END;
+
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'LinkedId') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD LinkedId nvarchar(100) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'EventTimeUtc') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD EventTimeUtc datetime2(0) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'CustomerName') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD CustomerName nvarchar(300) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'CompanyName') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD CompanyName nvarchar(300) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'OwnerName') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD OwnerName nvarchar(200) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'IsKnownCustomer') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD IsKnownCustomer bit NOT NULL
+                    CONSTRAINT DF_AgentIncomingEvents_IsKnownCustomer DEFAULT(0);
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'CustomerRank') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD CustomerRank nvarchar(10) NOT NULL
+                    CONSTRAINT DF_AgentIncomingEvents_CustomerRank DEFAULT(N'C');
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'Temperature') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD Temperature nvarchar(20) NOT NULL
+                    CONSTRAINT DF_AgentIncomingEvents_Temperature DEFAULT(N'COLD');
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'LastInvoiceDate') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD LastInvoiceDate nvarchar(10) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'LastInvoiceAmount') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD LastInvoiceAmount decimal(19,4) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'LastProduct') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD LastProduct nvarchar(400) NULL;
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'Sales30Days') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD Sales30Days decimal(19,4) NOT NULL
+                    CONSTRAINT DF_AgentIncomingEvents_Sales30Days_v376 DEFAULT(0);
+            IF COL_LENGTH(N'dbo.AgentIncomingEvents',N'CreatedAtUtc') IS NULL
+                ALTER TABLE dbo.AgentIncomingEvents ADD CreatedAtUtc datetime2(0) NOT NULL
+                    CONSTRAINT DF_AgentIncomingEvents_CreatedAtUtc_v376 DEFAULT(SYSUTCDATETIME());
+
+            IF OBJECT_ID(N'dbo.AgentCallOutcomes',N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.AgentCallOutcomes
+                (
+                    Id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    Extension nvarchar(10) NOT NULL,
+                    CallerNumber nvarchar(32) NOT NULL,
+                    Outcome nvarchar(30) NOT NULL,
+                    Note nvarchar(1000) NULL,
+                    FollowUpAt datetime2(0) NULL,
+                    LinkedId nvarchar(100) NULL,
+                    CreatedAtUtc datetime2(0) NOT NULL
+                        CONSTRAINT DF_AgentCallOutcomes_CreatedAtUtc DEFAULT(SYSUTCDATETIME())
+                );
+            END;
+
+            IF COL_LENGTH(N'dbo.AgentCallOutcomes',N'Note') IS NULL
+                ALTER TABLE dbo.AgentCallOutcomes ADD Note nvarchar(1000) NULL;
+            IF COL_LENGTH(N'dbo.AgentCallOutcomes',N'FollowUpAt') IS NULL
+                ALTER TABLE dbo.AgentCallOutcomes ADD FollowUpAt datetime2(0) NULL;
+            IF COL_LENGTH(N'dbo.AgentCallOutcomes',N'LinkedId') IS NULL
+                ALTER TABLE dbo.AgentCallOutcomes ADD LinkedId nvarchar(100) NULL;
+            IF COL_LENGTH(N'dbo.AgentCallOutcomes',N'CreatedAtUtc') IS NULL
+                ALTER TABLE dbo.AgentCallOutcomes ADD CreatedAtUtc datetime2(0) NOT NULL
+                    CONSTRAINT DF_AgentCallOutcomes_CreatedAtUtc_v376 DEFAULT(SYSUTCDATETIME());
+
+            IF NOT EXISTS
+            (
+                SELECT 1 FROM sys.indexes
+                WHERE object_id=OBJECT_ID(N'dbo.AgentIncomingEvents')
+                  AND name=N'IX_AgentIncomingEvents_ExtensionCreated'
+            )
+                CREATE INDEX IX_AgentIncomingEvents_ExtensionCreated
+                    ON dbo.AgentIncomingEvents(Extension,CreatedAtUtc DESC);
+
+            IF NOT EXISTS
+            (
+                SELECT 1 FROM sys.indexes
+                WHERE object_id=OBJECT_ID(N'dbo.AgentIncomingEvents')
+                  AND name=N'IX_AgentIncomingEvents_CallerCreated'
+            )
+                CREATE INDEX IX_AgentIncomingEvents_CallerCreated
+                    ON dbo.AgentIncomingEvents(CallerNumber,CreatedAtUtc DESC);
+
+            IF NOT EXISTS
+            (
+                SELECT 1 FROM sys.indexes
+                WHERE object_id=OBJECT_ID(N'dbo.AgentCallOutcomes')
+                  AND name=N'IX_AgentCallOutcomes_ExtensionCreated'
+            )
+                CREATE INDEX IX_AgentCallOutcomes_ExtensionCreated
+                    ON dbo.AgentCallOutcomes(Extension,CreatedAtUtc DESC);
+
+            IF NOT EXISTS
+            (
+                SELECT 1 FROM sys.indexes
+                WHERE object_id=OBJECT_ID(N'dbo.AgentCallOutcomes')
+                  AND name=N'IX_AgentCallOutcomes_CallerCreated'
+            )
+                CREATE INDEX IX_AgentCallOutcomes_CallerCreated
+                    ON dbo.AgentCallOutcomes(CallerNumber,CreatedAtUtc DESC);
+
+            COMMIT TRANSACTION;
+            """;
+
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(ct);
+            await using var command = new SqlCommand(sql, connection) { CommandTimeout = 120 };
+            await command.ExecuteNonQueryAsync(ct);
+
+            _schemaEnsured = true;
+        }
+        finally
+        {
+            SchemaGate.Release();
+        }
     }
 
     public async Task RecordIncoming(AgentCustomerCard card, CancellationToken ct)
@@ -123,10 +228,18 @@ public sealed class AgentPanelRepository
         Add(command, "@rank", SqlDbType.NVarChar, 10, card.CustomerRank);
         Add(command, "@temperature", SqlDbType.NVarChar, 20, card.Temperature);
         Add(command, "@invoiceDate", SqlDbType.NVarChar, 10, card.LastInvoiceDate);
-        command.Parameters.Add("@invoiceAmount", SqlDbType.Decimal).Value =
+        var invoiceAmount = command.Parameters.Add("@invoiceAmount", SqlDbType.Decimal);
+        invoiceAmount.Precision = 19;
+        invoiceAmount.Scale = 4;
+        invoiceAmount.Value =
             card.LastInvoiceAmount.HasValue ? card.LastInvoiceAmount.Value : DBNull.Value;
+
         Add(command, "@product", SqlDbType.NVarChar, 400, card.LastProduct);
-        command.Parameters.Add("@sales", SqlDbType.Decimal).Value = card.Sales30Days;
+
+        var sales = command.Parameters.Add("@sales", SqlDbType.Decimal);
+        sales.Precision = 19;
+        sales.Scale = 4;
+        sales.Value = card.Sales30Days;
 
         await command.ExecuteNonQueryAsync(ct);
     }

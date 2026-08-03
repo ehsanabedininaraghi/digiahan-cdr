@@ -4,7 +4,7 @@ using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using System.Text.Json.Serialization;
 
-const string AppVersion = "3.7.5";
+const string AppVersion = "3.7.6";
 const string BuildDate = "2026-08-03";
 
 var builder = WebApplication.CreateBuilder(args);
@@ -106,6 +106,7 @@ app.MapPost("/api/voip/events", async (
     CustomerIntelligenceRepository repository,
     AgentEventStore store,
     AgentPanelRepository panelRepository,
+    ILoggerFactory loggerFactory,
     CancellationToken ct) =>
 {
     var expected = configuration["Voip:ApiToken"];
@@ -117,9 +118,55 @@ app.MapPost("/api/voip/events", async (
         string.IsNullOrWhiteSpace(request.CallerNumber))
         return Results.BadRequest(new { error = "Extension and CallerNumber are required." });
 
-    var card = await repository.BuildCard(request, ct);
-    await panelRepository.RecordIncoming(card, ct);
-    return Results.Ok(store.Put(request.Extension.Trim(), card));
+    var logger = loggerFactory.CreateLogger("VoipEvent");
+    AgentCustomerCard card;
+
+    try
+    {
+        card = await repository.BuildCard(request, ct);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(
+            ex,
+            "VoIP BuildCard failed. Extension={Extension} Caller={Caller} LinkedId={LinkedId}",
+            request.Extension,
+            request.CallerNumber,
+            request.LinkedId);
+
+        return Results.Json(
+            new
+            {
+                error = "خطا در ساخت کارت مشتری",
+                stage = "BuildCard",
+                requestId = http.HttpContext.TraceIdentifier,
+                version = AppVersion,
+                utc = DateTime.UtcNow
+            },
+            statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    // Availability first: publish the popup before writing call history.
+    // A history-write failure must not block the live agent popup.
+    var envelope = store.Put(request.Extension.Trim(), card);
+
+    try
+    {
+        await panelRepository.RecordIncoming(card, ct);
+        http.HttpContext.Response.Headers["X-Voip-Persisted"] = "true";
+    }
+    catch (Exception ex)
+    {
+        http.HttpContext.Response.Headers["X-Voip-Persisted"] = "false";
+        logger.LogError(
+            ex,
+            "VoIP card was published but history persistence failed. Extension={Extension} Caller={Caller} LinkedId={LinkedId}",
+            request.Extension,
+            request.CallerNumber,
+            request.LinkedId);
+    }
+
+    return Results.Ok(envelope);
 });
 
 app.MapGet("/api/agent/{extension}/current", (
@@ -291,6 +338,19 @@ static (DateTime Start, DateTime End) ResolveRange(DateTime? startDate, DateTime
         end = start.AddDays(366);
 
     return (start, end);
+}
+
+
+try
+{
+    using var startupScope = app.Services.CreateScope();
+    var agentPanelRepository = startupScope.ServiceProvider
+        .GetRequiredService<AgentPanelRepository>();
+    await agentPanelRepository.EnsureSchema(CancellationToken.None);
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Agent panel schema startup check failed. The application will continue and retry on request.");
 }
 
 app.Run();
