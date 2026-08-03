@@ -36,29 +36,27 @@ public sealed class CustomerIntelligenceRepository
 
         var known = didar is not null || accounting is not null;
         var rank = CalculateRank(accounting?.Sales30Days ?? 0m, accounting?.InvoiceCount30Days ?? 0);
-        var temperature = CalculateTemperature(
-            call.LastCallAt,
-            accounting?.LastInvoiceDate,
-            call.CallsLast30Days,
-            accounting?.InvoiceCount30Days ?? 0);
+        var rankReason = CalculateRankReason(rank, accounting?.Sales30Days ?? 0m, accounting?.InvoiceCount30Days ?? 0);
+        var temperature = CalculateTemperature(call.LastCallAt, accounting?.LastInvoiceDate, call.CallsLast30Days, accounting?.InvoiceCount30Days ?? 0);
 
-        var displayName =
-            didar?.FullName ??
-            didar?.CompanyName ??
-            accounting?.CustomerName;
+        var displayName = didar?.FullName ?? didar?.CompanyName ?? accounting?.CustomerName;
+        var companyName = didar?.CompanyName ?? accounting?.CustomerName;
+        var identitySource = didar is not null && accounting is not null
+            ? "DIDAR_ACCOUNTING"
+            : didar is not null ? "DIDAR"
+            : accounting is not null ? "ACCOUNTING"
+            : "NEW";
 
-        var companyName =
-            didar?.CompanyName ??
-            accounting?.CustomerName;
-
+        var lastInvoiceDaysAgo = PersianDateDaysAgo(accounting?.LastInvoiceDate);
         var suggestion = BuildSuggestion(
             displayName,
             companyName,
-            didar?.OwnerName,
             accounting?.LastProduct,
-            accounting?.LastInvoiceDate,
+            lastInvoiceDaysAgo,
             rank,
-            known);
+            known,
+            call.CallsLast30Days,
+            accounting?.InvoiceCount30Days ?? 0);
 
         return new AgentCustomerCard(
             request.Extension.Trim(),
@@ -81,13 +79,13 @@ public sealed class CustomerIntelligenceRepository
             accounting?.Sales30Days ?? 0m,
             rank,
             temperature,
-            suggestion);
+            suggestion,
+            lastInvoiceDaysAgo,
+            identitySource,
+            rankReason);
     }
 
-    private static async Task<DidarInfo?> FindDidar(
-        SqlConnection connection,
-        string phone,
-        CancellationToken ct)
+    private static async Task<DidarInfo?> FindDidar(SqlConnection connection, string phone, CancellationToken ct)
     {
         const string sql = """
             SELECT TOP(1)
@@ -109,17 +107,10 @@ public sealed class CustomerIntelligenceRepository
         if (!await reader.ReadAsync(ct))
             return null;
 
-        return new DidarInfo(
-            GetString(reader, 0),
-            GetString(reader, 1),
-            GetString(reader, 2),
-            GetString(reader, 3));
+        return new DidarInfo(GetString(reader, 0), GetString(reader, 1), GetString(reader, 2), GetString(reader, 3));
     }
 
-    private static async Task<CallInfo> FindCallHistory(
-        SqlConnection connection,
-        string phone,
-        CancellationToken ct)
+    private static async Task<CallInfo> FindCallHistory(SqlConnection connection, string phone, CancellationToken ct)
     {
         const string sql = """
             SELECT
@@ -143,15 +134,12 @@ public sealed class CustomerIntelligenceRepository
             reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader[1]));
     }
 
-    private async Task<AccountingInfo?> FindAccounting(
-        SqlConnection connection,
-        string phone,
-        CancellationToken ct)
+    private async Task<AccountingInfo?> FindAccounting(SqlConnection connection, string phone, CancellationToken ct)
     {
         var tail = phone.Length >= 7 ? phone[^7..] : phone;
 
         const string customersSql = """
-            SELECT TOP(30)
+            SELECT TOP(40)
                 SourceDatabase,FiscalYear,DetailCode,CustomerName,CustomerTel
             FROM dbo.AccountingCustomers
             WHERE CustomerTel LIKE N'%'+@tail+N'%'
@@ -202,7 +190,7 @@ public sealed class CustomerIntelligenceRepository
             command.Parameters.Add("@detail", SqlDbType.NVarChar, 18).Value = match.DetailCode;
             await using var reader = await command.ExecuteReaderAsync(ct);
             await reader.ReadAsync(ct);
-            invoiceCount = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+            invoiceCount = reader.IsDBNull(0) ? 0 : Convert.ToInt32(reader[0]);
             sales = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
             lastDate = GetString(reader, 2);
         }
@@ -274,69 +262,84 @@ public sealed class CustomerIntelligenceRepository
         return "NEW";
     }
 
-    private static string CalculateTemperature(
-        DateTime? lastCallAt,
-        string? lastInvoiceDate,
-        int calls,
-        int invoices)
+    private static string CalculateRankReason(string rank, decimal sales, int invoices)
+        => rank switch
+        {
+            "A" => $"خرید بالا یا تکرار خرید زیاد؛ {invoices} فاکتور در داده موجود",
+            "B" => $"خرید متوسط و فعال؛ {invoices} فاکتور در داده موجود",
+            "C" => "سابقه خرید دارد، اما حجم یا تکرار خرید پایین‌تر است",
+            _ => "خریدی در داده حسابداری واردشده پیدا نشد"
+        };
+
+    private static string CalculateTemperature(DateTime? lastCallAt, string? lastInvoiceDate, int calls, int invoices)
     {
         if (calls >= 5 && invoices == 0) return "HOT";
-        if (calls >= 2 || invoices > 0) return "WARM";
+        if (calls >= 3 || invoices > 0) return "WARM";
         if (lastCallAt.HasValue && lastCallAt.Value >= DateTime.Now.AddDays(-30))
             return "WARM";
         return "COLD";
     }
 
+    private static int? PersianDateDaysAgo(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var parts = value.Trim().Replace("-", "/").Split('/');
+        if (parts.Length != 3 ||
+            !int.TryParse(parts[0], out var year) ||
+            !int.TryParse(parts[1], out var month) ||
+            !int.TryParse(parts[2], out var day))
+            return null;
+
+        try
+        {
+            var calendar = new PersianCalendar();
+            var gregorian = calendar.ToDateTime(year, month, day, 0, 0, 0, 0);
+            return Math.Max(0, (DateTime.Today - gregorian.Date).Days);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string BuildSuggestion(
         string? name,
         string? company,
-        string? owner,
         string? product,
-        string? lastInvoiceDate,
+        int? lastInvoiceDaysAgo,
         string rank,
-        bool known)
+        bool known,
+        int calls,
+        int invoices)
     {
         if (!known)
-            return "مشتری جدید است؛ ابتدا نام، شرکت، کالای موردنیاز و محل تحویل را دقیق ثبت کنید.";
+            return "مشتری جدید است. نام، شرکت، کالای موردنیاز، تناژ، محل تحویل و زمان خرید را دقیق ثبت کنید.";
 
         var subject = !string.IsNullOrWhiteSpace(company) ? company :
                       !string.IsNullOrWhiteSpace(name) ? name : "این مشتری";
 
+        if (calls >= 3 && invoices == 0)
+            return $"{subject} در ۳۰ روز اخیر چند بار تماس داشته اما خریدی در داده موجود ثبت نشده است. ابتدا علت نهایی‌نشدن خرید قبلی را روشن کنید.";
+
         if (!string.IsNullOrWhiteSpace(product))
-            return $"{subject} قبلاً «{product}» خریده است. ابتدا درباره همان نیاز و تجربه خرید قبلی سؤال کنید.";
+        {
+            var when = lastInvoiceDaysAgo.HasValue ? $"{lastInvoiceDaysAgo.Value} روز قبل" : "در آخرین خرید";
+            return $"{subject} {when} «{product}» خریده است. مکالمه را با پیگیری همان کالا و نیاز فعلی شروع کنید.";
+        }
 
         if (rank == "A")
-            return $"{subject} مشتری باارزش است. مکالمه را شخصی، سریع و با پیگیری دقیق پیش ببرید.";
+            return $"{subject} مشتری رده A است. پاسخ را سریع، شخصی و با پیگیری دقیق ادامه دهید.";
 
-        return $"{subject} سابقه تماس یا خرید دارد. قبل از اعلام قیمت، نیاز فعلی و زمان خرید را روشن کنید.";
+        return $"{subject} سابقه تماس یا خرید دارد. قبل از اعلام قیمت، کالای دقیق، تناژ، محل تحویل و زمان تصمیم را مشخص کنید.";
     }
 
     private static string? GetString(SqlDataReader reader, int ordinal)
         => reader.IsDBNull(ordinal) ? null : Convert.ToString(reader[ordinal]);
 
-    private sealed record DidarInfo(
-        string? ContactCode,
-        string? FullName,
-        string? CompanyName,
-        string? OwnerName);
-
-    private sealed record CallInfo(
-        DateTime? LastCallAt,
-        int CallsLast30Days);
-
-    private sealed record AccountingCustomerCandidate(
-        string SourceDatabase,
-        int FiscalYear,
-        string DetailCode,
-        string? CustomerName,
-        string? CustomerTel);
-
-    private sealed record AccountingInfo(
-        string DetailCode,
-        string? CustomerName,
-        string? LastInvoiceDate,
-        decimal? LastInvoiceAmount,
-        string? LastProduct,
-        int InvoiceCount30Days,
-        decimal Sales30Days);
+    private sealed record DidarInfo(string? ContactCode, string? FullName, string? CompanyName, string? OwnerName);
+    private sealed record CallInfo(DateTime? LastCallAt, int CallsLast30Days);
+    private sealed record AccountingCustomerCandidate(string SourceDatabase, int FiscalYear, string DetailCode, string? CustomerName, string? CustomerTel);
+    private sealed record AccountingInfo(string DetailCode, string? CustomerName, string? LastInvoiceDate, decimal? LastInvoiceAmount, string? LastProduct, int InvoiceCount30Days, decimal Sales30Days);
 }

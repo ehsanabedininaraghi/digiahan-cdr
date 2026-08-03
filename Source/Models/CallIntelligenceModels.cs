@@ -28,7 +28,10 @@ public sealed record AgentCustomerCard(
     decimal Sales30Days,
     string CustomerRank,
     string Temperature,
-    string SuggestedOpening);
+    string SuggestedOpening,
+    int? LastInvoiceDaysAgo,
+    string IdentitySource,
+    string CustomerRankReason);
 
 public sealed record AgentEventEnvelope(
     long Sequence,

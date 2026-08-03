@@ -4,8 +4,8 @@ using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using System.Text.Json.Serialization;
 
-const string AppVersion = "3.5.0";
-const string BuildDate = "2026-08-02";
+const string AppVersion = "3.6.0";
+const string BuildDate = "2026-08-03";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
@@ -33,6 +33,7 @@ builder.Services.AddSingleton<SqlCdrRepository>();
 builder.Services.AddSingleton<DashboardRepository>();
 builder.Services.AddSingleton<AgentEventStore>();
 builder.Services.AddSingleton<CustomerIntelligenceRepository>();
+builder.Services.AddSingleton<AgentPanelRepository>();
 builder.Services.AddSingleton<SalesDashboardRepository>();
 builder.Services.AddSingleton<AccountingSyncService>();
 
@@ -96,15 +97,15 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
-app.MapGet("/agent/{extension}", (string extension) =>
-    Results.Redirect($"/agent/index.html?extension={Uri.EscapeDataString(extension)}"));
-
+app.MapGet("/agent/{extension:int}", (int extension) =>
+    Results.Redirect($"/agent/index.html?extension={extension}"));
 app.MapPost("/api/voip/events", async (
     HttpRequest http,
     VoipRingEventRequest request,
     IConfiguration configuration,
     CustomerIntelligenceRepository repository,
     AgentEventStore store,
+    AgentPanelRepository panelRepository,
     CancellationToken ct) =>
 {
     var expected = configuration["Voip:ApiToken"];
@@ -117,6 +118,7 @@ app.MapPost("/api/voip/events", async (
         return Results.BadRequest(new { error = "Extension and CallerNumber are required." });
 
     var card = await repository.BuildCard(request, ct);
+    await panelRepository.RecordIncoming(card, ct);
     return Results.Ok(store.Put(request.Extension.Trim(), card));
 });
 
@@ -127,6 +129,38 @@ app.MapGet("/api/agent/{extension}/current", (
     var current = store.Get(extension.Trim());
     return current is null ? Results.NoContent() : Results.Ok(current);
 });
+app.MapPost("/api/agent/outcomes", async (
+    AgentOutcomeRequest request,
+    AgentPanelRepository repository,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Extension) ||
+        string.IsNullOrWhiteSpace(request.CallerNumber) ||
+        string.IsNullOrWhiteSpace(request.Outcome))
+        return Results.BadRequest(new { error = "Extension, CallerNumber and Outcome are required." });
+
+    return Results.Ok(await repository.SaveOutcome(request, ct));
+});
+
+app.MapGet("/api/agent/history", async (
+    string? extensions,
+    int? take,
+    AgentPanelRepository repository,
+    CancellationToken ct) =>
+    Results.Ok(await repository.RecentIncoming(extensions ?? "201", take ?? 20, ct)));
+
+app.MapGet("/api/agent/outcomes", async (
+    string? extensions,
+    int? take,
+    AgentPanelRepository repository,
+    CancellationToken ct) =>
+    Results.Ok(await repository.RecentOutcomes(extensions ?? "201", take ?? 15, ct)));
+
+app.MapGet("/api/agent/stats", async (
+    string? extensions,
+    AgentPanelRepository repository,
+    CancellationToken ct) =>
+    Results.Ok(await repository.Stats(extensions ?? "201", ct)));
 app.MapGet("/api/dashboard/summary", async (DateTime? startDate, DateTime? endDate, string? extension, DashboardRepository repo, CancellationToken ct) =>
 {
     var (start, end) = ResolveRange(startDate, endDate);
