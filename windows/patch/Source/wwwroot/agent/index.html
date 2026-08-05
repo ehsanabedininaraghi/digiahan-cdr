@@ -1,0 +1,78 @@
+﻿<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل تماس هوشمند دیجی‌آهن</title>
+<link rel="stylesheet" href="/agent/style.css">
+</head>
+<body>
+<main class="app">
+<header>
+  <div>
+    <h1>پنل تماس هوشمند دیجی‌آهن</h1>
+    <p id="agentTitle">در حال اتصال...</p>
+  </div>
+  <span id="status" class="status">در انتظار تماس</span>
+</header>
+
+<section id="empty" class="empty">
+  <strong>در انتظار تماس ورودی</strong>
+  <span>این صفحه را روی سیستم کارشناس باز نگه دارید.</span>
+</section>
+
+<section id="card" class="card hidden">
+  <div class="hero">
+    <div>
+      <span class="eyebrow">تماس ورودی</span>
+      <h2 id="customerName">مشتری جدید</h2>
+      <p id="companyName">—</p>
+    </div>
+    <div class="rank"><span>رتبه</span><b id="rank">NEW</b></div>
+  </div>
+
+  <div class="phone-line">
+    <b id="phone">—</b>
+    <span id="temperature">—</span>
+  </div>
+
+  <div class="metrics">
+    <article><span>آخرین تماس</span><b id="lastCall">—</b></article>
+    <article><span>تماس ۳۰ روز</span><b id="calls30">۰</b></article>
+    <article><span>آخرین خرید</span><b id="lastPurchase">—</b></article>
+    <article><span>آخرین مبلغ</span><b id="lastAmount">—</b></article>
+    <article><span>فاکتورهای ۳۰ روز</span><b id="invoiceCount">۰</b></article>
+    <article><span>فروش ۳۰ روز</span><b id="sales30">۰</b></article>
+  </div>
+
+  <div class="details">
+    <div><span>مسئول دیدار</span><b id="owner">—</b></div>
+    <div><span>آخرین کالا</span><b id="product">—</b></div>
+    <div><span>کد حسابداری</span><b id="accountingCode">—</b></div>
+  </div>
+
+  <aside class="suggestion">
+    <span>پیشنهاد شروع مکالمه</span>
+    <p id="suggestion">—</p>
+  </aside>
+</section>
+
+<section class="history">
+  <h3>آخرین تماس‌های نمایش‌داده‌شده</h3>
+  <div id="historyRows"></div>
+</section>
+</main>
+
+<div id="popup" class="popup hidden">
+  <div class="popup-inner">
+    <span>تماس ورودی</span>
+    <h2 id="popupName">—</h2>
+    <b id="popupPhone">—</b>
+    <p id="popupHint">—</p>
+    <button id="closePopup">بستن</button>
+  </div>
+</div>
+
+<script src="/agent/app.js"></script>
+</body>
+</html>

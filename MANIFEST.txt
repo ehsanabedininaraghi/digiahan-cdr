@@ -1,0 +1,9 @@
+./MANIFEST.txt
+./README-FA.md
+./RUN-v4.0.0.cmd
+./RUN-v4.0.0.ps1
+./payload/Source/Program.cs
+./payload/Source/Services/AgentPanelRepository.cs
+./payload/Source/Services/CustomerIntelligenceRepository.cs
+./payload/Source/Services/VoipIncidentLogger.cs
+./payload/tools/test-all-connections-v4.0.0.ps1

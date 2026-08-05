@@ -1,0 +1,26 @@
+﻿{
+  "token": "CHANGE-THIS-TO-A-LONG-RANDOM-TOKEN",
+  "sourceServer": "Issabel",
+  "records": [
+    {
+      "calldate": "2026-07-28T16:30:00",
+      "clid": "\"Test Caller\" <09120000000>",
+      "src": "09120000000",
+      "dst": "201",
+      "dcontext": "from-trunk",
+      "channel": "PJSIP/trunk-test",
+      "dstChannel": "PJSIP/201-test",
+      "lastApp": "Dial",
+      "lastData": "PJSIP/201",
+      "duration": 12,
+      "billsec": 8,
+      "disposition": "ANSWERED",
+      "amaflags": 3,
+      "uniqueId": "TEST-20260728-001",
+      "recordingFile": "/var/spool/asterisk/monitor/test.wav",
+      "linkedId": "TEST-20260728-001",
+      "sequenceNo": 1,
+      "sourceRowKey": "TEST-20260728-001-1"
+    }
+  ]
+}

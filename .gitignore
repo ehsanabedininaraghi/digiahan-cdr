@@ -27,3 +27,14 @@ Thumbs.db
 Source/appsettings.Accounting.local.json
 
 Source/appsettings.Voip.local.json
+
+
+
+Source/appsettings.json
+**/appsettings.Development.json
+.env
+**/bin/
+**/obj/
+Logs/
+_backups/
+*.log

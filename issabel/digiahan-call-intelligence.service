@@ -1,0 +1,14 @@
+[Unit]
+Description=DigiAhan Call Intelligence AMI Relay
+After=network-online.target asterisk.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/digiahan-call-intelligence/digiahan_call_intelligence.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

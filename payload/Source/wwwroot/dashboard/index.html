@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>داشبورد تماس دیجی‌آهن</title>
+<link rel="stylesheet" href="style.css?v=374">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <div class="brand"><img class="brand-logo" src="assets/digiahan-logo.png" alt="لوگوی دیجی‌آهن"><div class="brand-title"><b>دیجی‌آهن</b><small>مدیریت تماس‌ها</small></div></div>
+  <nav><a class="active">داشبورد</a><a href="#calls">تماس‌ها</a><a href="#extensions">داخلی‌ها</a><a href="#trend">گزارش زمانی</a><a href="#sales">فروش</a></nav>
+  <div class="sync"><span id="syncDot"></span><div><b id="syncText">در حال بررسی</b><small id="syncTime">...</small></div></div>
+  <div class="sync accounting-sync"><span id="accountingSyncDot"></span><div><b id="accountingSyncText">در حال بررسی حسابداری</b><small id="accountingSyncTime">...</small></div></div>
+</aside>
+<main>
+<header>
+  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v3.7.4</span></h1><p>گزارش تماس‌ها، مشتریان و عملکرد داخلی‌ها</p></div>
+</header>
+
+<section class="panel filter-panel">
+  <div class="range-tools">
+    <div class="quick-periods">
+      <button class="period active" data-period="today">روزانه</button>
+      <button class="period" data-period="week">هفتگی</button>
+      <button class="period" data-period="month">ماهانه</button>
+      <button class="period" data-period="custom">بازه دلخواه</button>
+    </div>
+    <label>از تاریخ<input id="startDate" type="date"></label>
+    <label>تا تاریخ<input id="endDate" type="date"></label>
+    <label>فروشنده / داخلی
+      <select id="extension">
+        <option value="all">همه داخلی‌ها</option>
+        <option value="201">۲۰۱ - مجید</option><option value="202">۲۰۲ - مجید</option>
+        <option value="203">۲۰۳ - شافوری</option><option value="204">۲۰۴ - شافوری</option>
+        <option value="205">۲۰۵ - ایلیا</option><option value="206">۲۰۶ - ایلیا</option>
+        <option value="207">۲۰۷ - تقی‌زاده</option><option value="208">۲۰۸ - تقی‌زاده</option>
+        <option value="211">۲۱۱ - حسنی</option><option value="212">۲۱۲ - حسنی</option>
+        <option value="213">۲۱۳ - فراهانی</option><option value="214">۲۱۴ - فراهانی</option>
+        <option value="215">۲۱۵ - حسنا</option><option value="216">۲۱۶ - حسنا</option>
+        <option value="217">۲۱۷ - فتحی</option><option value="218">۲۱۸ - فتحی</option>
+        <option value="219">۲۱۹ - زمانی</option><option value="220">۲۲۰ - زمانی</option>
+        <option value="223">۲۲۳ - پویا</option><option value="224">۲۲۴ - پویا</option>
+        <option value="225">۲۲۵ - عابدینی</option><option value="226">۲۲۶ - عابدینی</option>
+        <option value="400">۴۰۰</option><option value="401">۴۰۱</option>
+      </select>
+    </label>
+    <button id="refresh">اعمال گزارش</button>
+  </div>
+  <p id="rangeCaption" class="range-caption"></p>
+</section>
+
+<section class="cards">
+<article><span>کل تماس‌ها</span><strong id="total">۰</strong><small>تماس یکتا</small></article>
+<article><span>پاسخ داده‌شده</span><strong id="answered">۰</strong><small id="answerRate">۰٪ نرخ پاسخ</small></article>
+<article class="danger"><span>از دست‌رفته</span><strong id="missed">۰</strong><small>نیازمند پیگیری</small></article>
+<article class="new-customer-card"><span>مشتری جدید واقعی</span><strong id="newCustomers">۰</strong><small>شماره یکتای ثبت‌نشده در دیدار یا حسابداری</small></article>
+<article><span>مشتری شناخته‌شده</span><strong id="knownCustomers">۰</strong><small>شماره یکتای شناسایی‌شده</small></article>
+<article><span>زمان مکالمه</span><strong id="talk">۰</strong><small id="avg">میانگین ۰</small></article>
+<article><span>ورودی</span><strong id="inbound">۰</strong><small>از خطوط شهری</small></article>
+<article><span>خروجی</span><strong id="outbound">۰</strong><small>تماس کارشناسان</small></article>
+</section>
+
+<section class="grid">
+<article class="panel wide"><div class="panel-head"><div><h2>الگوی ساعتی تماس‌ها</h2><p>در بازه انتخاب‌شده</p></div></div><div id="chart" class="chart"></div></article>
+<article class="panel"><div class="panel-head"><div><h2>نرخ پاسخ</h2><p>ترکیب نتیجه تماس‌ها</p></div></div><div id="donut" class="donut"><div><b id="donutValue">۰٪</b><span>پاسخ</span></div></div><div class="legend"><span><i class="ok"></i>پاسخ داده‌شده</span><span><i class="bad"></i>از دست‌رفته</span></div></article>
+</section>
+
+<section id="trend" class="panel">
+<div class="panel-head"><div><h2>روند روزانه</h2><p>مقایسه روزهای بازه انتخاب‌شده</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>کل</th><th>پاسخ</th><th>بی‌پاسخ</th><th>ورودی</th><th>خروجی</th><th>مشتری جدید</th><th>شناخته‌شده</th><th>مکالمه</th></tr></thead><tbody id="dailyRows"></tbody></table></div>
+</section>
+
+<section id="extensions" class="panel">
+<div class="panel-head"><div><h2>عملکرد داخلی‌ها / فروشنده‌ها</h2><p>رتبه‌بندی در بازه انتخاب‌شده</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>کل</th><th>پاسخ</th><th>از دست‌رفته</th><th>مکالمه</th><th>میانگین</th></tr></thead><tbody id="extRows"></tbody></table></div>
+</section>
+
+<section id="sales" class="panel sales-panel">
+  <div class="panel-head">
+    <div><h2>فروش ۳۰ روز اخیر</h2><p id="salesCaption">اطلاعات واقعی از حسابداری دفتر ۱۴۰۵</p></div>
+  </div>
+
+  <section class="cards sales-cards">
+    <article><span>مبلغ فروش</span><strong id="salesTotal">۰</strong><small>ریال</small></article>
+    <article><span>تعداد فاکتور</span><strong id="salesInvoices">۰</strong><small>فاکتور فروش</small></article>
+    <article><span>مشتریان خریدار</span><strong id="salesCustomers">۰</strong><small>کد حسابداری یکتا</small></article>
+    <article><span>میانگین فاکتور</span><strong id="salesAverage">۰</strong><small>ریال</small></article>
+  </section>
+
+  <div class="grid">
+    <article class="panel">
+      <div class="panel-head"><div><h2>فروش به تفکیک ویزیتور</h2><p>راستی‌آزمایی مستقل از حسابداری</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ویزیتور</th><th>نقش</th><th>فاکتور</th><th>فروش</th><th>میانگین</th></tr></thead>
+        <tbody id="salesVisitorRows"></tbody>
+      </table></div>
+    </article>
+    <article class="panel wide">
+      <div class="panel-head"><div><h2>آخرین فاکتورهای فروش</h2><p>۳۰ روز اخیر</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>تاریخ</th><th>شماره</th><th>مشتری</th><th>ویزیتور</th><th>اقلام</th><th>مبلغ</th></tr></thead>
+        <tbody id="salesInvoiceRows"></tbody>
+      </table></div>
+    </article>
+  </div>
+</section>
+<section id="calls" class="panel">
+<div class="panel-head call-head"><div><h2>تماس‌های یکتا و قابل پیگیری</h2><p id="callCount">...</p></div>
+<div class="filters"><input id="search" placeholder="شماره، نام، شرکت، مسئول یا LinkedID"><select id="status"><option value="all">همه وضعیت‌ها</option><option value="answered">پاسخ داده‌شده</option><option value="missed">از دست‌رفته</option><option value="new">فقط مشتری جدید</option><option value="known">فقط مشتریان شناسایی‌شده</option></select></div></div>
+<div class="table-wrap"><table><thead><tr><th>زمان</th><th>مبدأ</th><th>مقصد</th><th>نام مشتری</th><th>شرکت</th><th>مسئول</th><th>جهت</th><th>وضعیت</th><th>مدت</th><th>مکالمه</th><th>ضبط</th></tr></thead><tbody id="callRows"></tbody></table></div>
+</section>
+
+<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v3.7.4</span></footer>
+</main>
+</div>
+<div id="toast"></div>
+<script src="app.js?v=374"></script>
+</body>
+</html>

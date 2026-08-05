@@ -1,4 +1,4 @@
-using DigiAhan.CDR.Receiver.Models;
+﻿using DigiAhan.CDR.Receiver.Models;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Globalization;
@@ -9,7 +9,6 @@ namespace DigiAhan.CDR.Receiver.Services;
 public sealed class CustomerIntelligenceRepository
 {
     private readonly string _connectionString;
-    private readonly ILogger<CustomerIntelligenceRepository> _logger;
 
     public CustomerIntelligenceRepository(
         IConfiguration configuration,
@@ -17,7 +16,6 @@ public sealed class CustomerIntelligenceRepository
     {
         _connectionString = configuration.GetConnectionString("DigiAhanCdr")
             ?? throw new InvalidOperationException("ConnectionStrings:DigiAhanCdr is missing.");
-        _logger = logger;
     }
 
     public async Task<AgentCustomerCard> BuildCard(
@@ -106,106 +104,6 @@ public sealed class CustomerIntelligenceRepository
             lastInvoiceDaysAgo,
             identitySource,
             rankReason);
-    }
-
-
-    public async Task<AgentCustomerCard> BuildFallbackCard(
-        VoipRingEventRequest request,
-        CancellationToken ct)
-    {
-        var phone = NormalizePhone(request.CallerNumber);
-        var eventTime = request.EventTimeUtc ?? DateTime.UtcNow;
-
-        string? displayName = null;
-        string? companyName = null;
-        string? ownerName = null;
-        string? didarCode = null;
-        string? accountingCode = null;
-        string identitySource = "FALLBACK_NEW";
-        var verified = false;
-
-        try
-        {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync(ct);
-
-            const string sql = """
-            IF OBJECT_ID(N'dbo.CustomerPhoneDirectory',N'V') IS NOT NULL
-            BEGIN
-                SELECT TOP(1)
-                    DisplayName,
-                    CompanyName,
-                    OwnerName,
-                    DidarContactCode,
-                    AccountingDetailCode,
-                    MatchSource,
-                    IsVerified
-                FROM dbo.CustomerPhoneDirectory
-                WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
-                ORDER BY IsVerified DESC,IdentityId;
-            END;
-            """;
-
-            await using var command = new SqlCommand(sql, connection)
-            {
-                CommandTimeout = 5
-            };
-            command.Parameters.Add("@phone", SqlDbType.NVarChar, 32).Value = phone;
-
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            if (await reader.ReadAsync(ct))
-            {
-                displayName = GetString(reader, 0);
-                companyName = GetString(reader, 1);
-                ownerName = GetString(reader, 2);
-                didarCode = GetString(reader, 3);
-                accountingCode = GetString(reader, 4);
-                identitySource = GetString(reader, 5) ?? "FALLBACK_DIRECTORY";
-                verified = !reader.IsDBNull(6) && reader.GetBoolean(6);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Fallback customer lookup failed. Extension={Extension} Caller={Caller}",
-                request.Extension,
-                request.CallerNumber);
-        }
-
-        var known = !string.IsNullOrWhiteSpace(displayName)
-            || !string.IsNullOrWhiteSpace(didarCode)
-            || !string.IsNullOrWhiteSpace(accountingCode);
-
-        var suggestion = known
-            ? $"تماس ورودی از {displayName ?? companyName ?? phone}. اطلاعات پایه مشتری بازیابی شد."
-            : "مشتری جدید است؛ نام، شرکت و موضوع درخواست را ثبت کنید.";
-
-        return new AgentCustomerCard(
-            request.Extension.Trim(),
-            phone,
-            eventTime,
-            request.LinkedId,
-            displayName,
-            companyName,
-            ownerName,
-            didarCode,
-            known,
-            null,
-            0,
-            accountingCode,
-            displayName,
-            null,
-            null,
-            null,
-            0,
-            0m,
-            known && verified ? "B" : "C",
-            "COLD",
-            suggestion,
-            null,
-            identitySource,
-            known ? "بازیابی سریع از دفترچه یکپارچه مشتریان" : "شماره در دفترچه مشتریان پیدا نشد");
     }
 
     private static async Task<IdentityInfo?> FindIdentity(
