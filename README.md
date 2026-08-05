@@ -23,4 +23,4 @@ dotnet run
 داشبورد: `http://localhost:5088/dashboard`
 
 ## نسخه فعلی
-`v3.1.0`
+`v4.0.1`
