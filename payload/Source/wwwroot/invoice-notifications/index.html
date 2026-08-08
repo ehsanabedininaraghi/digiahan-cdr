@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ارسال اطلاعات خرید مشتری</title>
+  <link rel="stylesheet" href="style.css?v=431">
+</head>
+<body>
+<header>
+  <div><h1>ارسال اطلاعات خرید مشتری <span>v4.3.1</span></h1><p>آماده‌سازی کنترل‌شده لینک و متن پیامک؛ ارسال در این نسخه دستی است.</p></div>
+  <a href="/dashboard">بازگشت به داشبورد</a>
+</header>
+<main>
+  <section class="toolbar">
+    <label>توکن مدیریت<input id="apiToken" type="password" placeholder="برای دسترسی از شبکه وارد کنید"></label>
+    <label>نام کاربر<input id="actor" value="مدیر"></label>
+    <label>وضعیت<select id="status"><option value="all">همه</option><option value="READY">آماده</option><option value="NEEDS_PHONE">بدون موبایل</option><option value="NEEDS_IDENTITY">بدون هویت</option><option value="PREPARED">متن آماده</option><option value="MANUALLY_SENT">ارسال دستی ثبت‌شده</option></select></label>
+    <button id="saveToken" class="secondary">ذخیره توکن</button>
+    <button id="discover" class="secondary">بررسی فاکتورهای جدید</button>
+    <button id="refresh" class="secondary">به‌روزرسانی</button>
+    <button id="prepare">آماده‌سازی پیام انتخاب‌شده</button>
+  </section>
+
+  <section class="notice">در لینک مشتری هیچ شناسه دیتابیس، شماره فاکتور یا کد حسابداری قرار نمی‌گیرد. تغییر شماره، آن شماره را به‌عنوان Primary Mobile همان IdentityId ثبت می‌کند.</section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>فاکتورهای دارای حواله</h2><p id="summary">در حال دریافت...</p></div><label class="select-all"><input id="selectAll" type="checkbox"> انتخاب همه آماده‌ها</label></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>فاکتور</th><th>تاریخ</th><th>مشتری</th><th>محصول</th><th>حواله</th><th>Primary Mobile</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="preparedPanel" class="panel hidden">
+    <div class="panel-head"><div><h2>متن‌های آماده ارسال</h2><p>متن را کپی کنید، دستی بفرستید و سپس «ارسال شد» را ثبت کنید.</p></div></div>
+    <div id="preparedRows" class="prepared-grid"></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="app.js?v=431"></script>
+</body>
+</html>

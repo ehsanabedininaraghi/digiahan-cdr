@@ -11,6 +11,12 @@
 @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}}
 
 .version-badge{display:inline-block;vertical-align:middle;margin-right:8px;padding:4px 8px;border-radius:8px;background:#eaf2ff;color:var(--blue);font-size:11px;font-weight:700}
+.health-cards{grid-template-columns:repeat(5,1fr)}
+.health-cards strong{font-size:18px}
+.health-error{max-width:320px;white-space:normal;color:var(--red)}
+.query-metrics{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;padding:12px;background:#f7f9fc;border-radius:10px;color:var(--muted);font-size:11px;direction:rtl}
+td small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.direction-in{color:#0d8b6c}.direction-out{color:#285eb5}
 
 .filter-panel{padding:14px 18px}
 .range-tools{display:flex;align-items:end;gap:10px;flex-wrap:wrap}
@@ -27,3 +33,4 @@
  .quick-periods{display:grid;grid-template-columns:repeat(2,1fr)}
  .range-tools label input,.range-tools label select{width:100%}
 }
+@media(max-width:1100px){.health-cards{grid-template-columns:repeat(2,1fr)}}

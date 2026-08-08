@@ -78,6 +78,7 @@ BEGIN
         FactorDate nvarchar(10) NULL,
         TypeIndex int NULL,
         TypeDescription nvarchar(500) NULL,
+        FactorDescription nvarchar(1000) NULL,
         CustomerShortCode nvarchar(12) NULL,
         CustomerDetailCode nvarchar(18) NULL,
         CustomerName nvarchar(400) NULL,
@@ -92,6 +93,10 @@ BEGIN
     CREATE INDEX IX_AccountingInvoices_Customer
         ON dbo.AccountingInvoices(SourceDatabase, FiscalYear, CustomerDetailCode);
 END;
+
+IF OBJECT_ID(N'dbo.AccountingInvoices', N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.AccountingInvoices',N'FactorDescription') IS NULL
+    ALTER TABLE dbo.AccountingInvoices ADD FactorDescription nvarchar(1000) NULL;
 
 IF OBJECT_ID(N'dbo.AccountingInvoiceItems', N'U') IS NULL
 BEGIN

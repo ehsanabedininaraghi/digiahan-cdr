@@ -2,16 +2,22 @@ using DigiAhan.CDR.Receiver.Logging;
 using DigiAhan.CDR.Receiver.Models;
 using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Data.SqlClient;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
-const string AppVersion = "4.0.0";
-const string BuildDate = "2026-08-03";
+const string AppVersion = "4.3.1";
+const string BuildDate = "2026-08-08";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
+    optional: true,
+    reloadOnChange: true);
+builder.Configuration.AddJsonFile(
+    "appsettings.DataGathering.local.json",
     optional: true,
     reloadOnChange: true);
 
@@ -28,6 +34,10 @@ builder.Services.Configure<JsonOptions>(options =>
     options.SerializerOptions.PropertyNameCaseInsensitive = true;
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
+builder.Services.AddOutputCache(options =>
+    options.AddBasePolicy(policy => policy
+        .Expire(TimeSpan.FromSeconds(30))
+        .SetVaryByQuery("*")));
 
 builder.Services.AddSingleton<SqlQueryStore>();
 builder.Services.AddSingleton<SqlCdrRepository>();
@@ -38,6 +48,32 @@ builder.Services.AddSingleton<AgentPanelRepository>();
 builder.Services.AddSingleton<SalesDashboardRepository>();
 builder.Services.AddSingleton<AccountingSyncService>();
 builder.Services.AddSingleton<VoipIncidentLogger>();
+builder.Services.AddSingleton<ExcelMappingReader>();
+builder.Services.AddSingleton<CustomerMappingService>();
+builder.Services.AddSingleton<LegacyAccountingBridgeRunner>();
+builder.Services.AddSingleton<CustomerIdentityReconcileService>();
+builder.Services.AddSingleton<DidarPhoneRebuildService>();
+builder.Services.AddSingleton<DataGatheringCoordinator>();
+builder.Services.AddSingleton<IntegrationSchedulerRepository>();
+builder.Services.AddSingleton<SystemHealthService>();
+builder.Services.AddSingleton<DatabaseMaintenanceService>();
+builder.Services.AddSingleton<IntegrationSchedulerService>();
+builder.Services.AddSingleton<InvoiceNotificationRepository>();
+builder.Services.AddHostedService<IntegrationSchedulerWorker>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("public-order", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -77,6 +113,8 @@ app.Use(async (context, next) =>
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseOutputCache();
+app.UseRateLimiter();
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -99,6 +137,11 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
+app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
+app.MapGet("/order/{token}", (string token) =>
+    PublicTokenService.IsWellFormed(token)
+        ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
+        : Results.NotFound());
 app.MapGet("/agent/{extension:int}", (int extension) =>
     Results.Redirect($"/agent/index.html?extension={extension}"));
 app.MapPost("/api/voip/events", async (
@@ -380,21 +423,75 @@ app.MapGet("/api/dashboard/calls", async (DateTime? startDate, DateTime? endDate
 });
 app.MapGet("/api/dashboard/sync", async (DashboardRepository repo, CancellationToken ct) => Results.Ok(await repo.Sync(ct)));
 
+app.MapGet("/api/dashboard/seller-performance", async (
+    DateTime? startDate, DateTime? endDate, string? extension, DashboardRepository repo, CancellationToken ct) =>
+{
+    var (start, end) = ResolveRange(startDate, endDate);
+    return Results.Ok(await repo.SellerPerformance(start, end, extension, ct));
+});
+
 app.MapGet("/api/sales/summary", async (
+    DateTime? startDate,
+    DateTime? endDate,
     SalesDashboardRepository repo,
     CancellationToken ct) =>
-    Results.Ok(await repo.Summary(ct)));
+{
+    var (start, end) = ResolveRange(startDate, endDate);
+    return Results.Ok(await repo.Summary(start, end, ct));
+});
 
 app.MapGet("/api/sales/by-visitor", async (
+    DateTime? startDate,
+    DateTime? endDate,
     SalesDashboardRepository repo,
     CancellationToken ct) =>
-    Results.Ok(await repo.ByVisitor(ct)));
+{
+    var (start, end) = ResolveRange(startDate, endDate);
+    return Results.Ok(await repo.ByVisitor(start, end, ct));
+});
 
 app.MapGet("/api/sales/recent-invoices", async (
+    DateTime? startDate,
+    DateTime? endDate,
     int? take,
     SalesDashboardRepository repo,
     CancellationToken ct) =>
-    Results.Ok(await repo.RecentInvoices(take ?? 25, ct)));
+{
+    var (start, end) = ResolveRange(startDate, endDate);
+    return Results.Ok(await repo.RecentInvoices(start, end, take ?? 25, ct));
+});
+
+app.MapGet("/api/system/health", async (
+    SystemHealthService service,
+    CancellationToken ct) => Results.Ok(await service.GetAsync(ct)));
+
+app.MapGet("/api/system/schedules", async (
+    IntegrationSchedulerRepository repository,
+    CancellationToken ct) => Results.Ok(await repository.GetAllAsync(ct)));
+
+app.MapPut("/api/system/schedules/{jobKey}", async (
+    string jobKey,
+    IntegrationScheduleUpdate update,
+    HttpContext context,
+    IConfiguration configuration,
+    IntegrationSchedulerRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    await repository.UpdateAsync(jobKey.Trim().ToUpperInvariant(), update, ct);
+    return Results.Ok(await repository.GetAllAsync(ct));
+});
+
+app.MapPost("/api/system/schedules/{jobKey}/run", async (
+    string jobKey,
+    HttpContext context,
+    IConfiguration configuration,
+    IntegrationSchedulerService scheduler,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(new { started = await scheduler.RunAsync(jobKey, true, ct) });
+});
 
 app.MapGet("/api/accounting/status", async (
     AccountingSyncService service,
@@ -403,14 +500,178 @@ app.MapGet("/api/accounting/status", async (
 
 app.MapPost("/api/accounting/sync", async (
     int? days,
+    HttpContext context,
+    IConfiguration configuration,
     AccountingSyncService service,
+    InvoiceNotificationRepository notifications,
     CancellationToken ct) =>
 {
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
     var result = await service.SyncAsync(days ?? 30, ct);
+    if (result.Status == "SUCCESS") await notifications.DiscoverAsync(ct);
     return result.Status == "SUCCESS"
         ? Results.Ok(result)
         : Results.Json(result, statusCode: StatusCodes.Status500InternalServerError);
 });
+
+app.MapGet("/api/invoice-notifications", async (
+    string? status,
+    int? take,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(await repository.ListAsync(status, take ?? 200, ct));
+});
+
+app.MapPost("/api/invoice-notifications/discover", async (
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(await repository.DiscoverAsync(ct));
+});
+
+app.MapPost("/api/invoice-notifications/{id:long}/primary-mobile", async (
+    long id,
+    SetPrimaryMobileRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        var phone = await repository.SetPrimaryMobileAsync(id, request.Phone, request.Actor, ct);
+        return Results.Ok(new { phone });
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/invoice-notifications/prepare", async (
+    PrepareInvoiceNotificationsRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(await repository.PrepareAsync(request.NotificationIds, request.Actor, ct));
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/invoice-notifications/{id:long}/manual-sent", async (
+    long id,
+    MarkManualSentRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        await repository.MarkManualSentAsync(id, request.Actor, request.Note, ct);
+        return Results.Ok(new { status = "MANUALLY_SENT" });
+    }
+    catch (SqlException ex) when (ex.Number == 51000)
+    {
+        return Results.BadRequest(new { error = "ابتدا باید متن و لینک پیامک آماده شود." });
+    }
+});
+
+app.MapGet("/api/public/orders/{token}", async (
+    string token,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    var order = await repository.FindPublicOrderAsync(token, ct);
+    return order is null ? Results.NotFound(new { error = "لینک معتبر نیست یا منقضی شده است." }) : Results.Ok(order);
+}).RequireRateLimiting("public-order");
+
+app.MapGet("/api/data-gathering/status", async (
+    DataGatheringCoordinator coordinator,
+    CancellationToken ct) =>
+    Results.Ok(await coordinator.GetStatusAsync(ct)));
+
+app.MapGet("/api/identities/status", async (
+    CustomerIdentityReconcileService identities,
+    CancellationToken ct) =>
+    Results.Ok(await identities.GetStatusAsync(ct)));
+
+app.MapPost("/api/identities/reconcile", async (
+    HttpContext context,
+    IConfiguration configuration,
+    CustomerIdentityReconcileService identities,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context,configuration)) return Results.Unauthorized();
+    return Results.Ok(await identities.ReconcileAsync(ct));
+});
+
+app.MapGet("/api/didar/{didarContactCode}/phones", async (
+    string didarContactCode,
+    DidarPhoneRebuildService phones,
+    CancellationToken ct) =>
+    Results.Ok(await phones.GetContactPhonesAsync(didarContactCode,ct)));
+
+app.MapPost("/api/data-gathering/run", async (
+    HttpContext context,
+    IConfiguration configuration,
+    DataGatheringCoordinator coordinator,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    var result = await coordinator.RunAsync(ct);
+    return result.Status == "FAILED"
+        ? Results.Json(result, statusCode: StatusCodes.Status500InternalServerError)
+        : Results.Ok(result);
+});
+
+app.MapGet("/api/mappings/summary", async (
+    CustomerMappingService service,
+    CancellationToken ct) =>
+    Results.Ok(await service.GetSummaryAsync(ct)));
+
+app.MapGet("/api/mappings/unmapped", async (
+    int? take,
+    CustomerMappingService service,
+    CancellationToken ct) =>
+    Results.Ok(await service.GetUnmappedAsync(take ?? 500, ct)));
+
+app.MapPost("/api/mappings/import", async (
+    HttpContext context,
+    HttpRequest request,
+    IConfiguration configuration,
+    CustomerMappingService service,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Send mappingfile.xlsx as multipart/form-data field 'file'." });
+    var form = await request.ReadFormAsync(ct);
+    var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "Excel file is required." });
+    if (!string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "Only .xlsx files are supported." });
+    await using var input = file.OpenReadStream();
+    return Results.Ok(await service.ImportExcelAsync(input, Path.GetFileName(file.FileName), ct));
+}).DisableAntiforgery();
 
 app.MapPost("/api/cdr", async (
     HttpRequest httpRequest,
@@ -485,6 +746,17 @@ static (DateTime Start, DateTime End) ResolveRange(DateTime? startDate, DateTime
     return (start, end);
 }
 
+static bool CanWriteInternalData(HttpContext context, IConfiguration configuration)
+{
+    var remote = context.Connection.RemoteIpAddress;
+    if (remote is not null && System.Net.IPAddress.IsLoopback(remote)) return true;
+    var expected = configuration["Receiver:ApiToken"];
+    var supplied = context.Request.Headers["X-Api-Token"].FirstOrDefault();
+    return !string.IsNullOrWhiteSpace(expected)
+        && !string.IsNullOrWhiteSpace(supplied)
+        && TokenComparer.FixedTimeEquals(expected, supplied);
+}
+
 
 try
 {
@@ -496,6 +768,17 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "Agent panel schema startup check failed. The application will continue and retry on request.");
+}
+
+try
+{
+    using var startupScope = app.Services.CreateScope();
+    var notifications = startupScope.ServiceProvider.GetRequiredService<InvoiceNotificationRepository>();
+    await notifications.EnsureSchemaAsync(CancellationToken.None);
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Invoice notification schema startup check failed. The application will continue and retry on request.");
 }
 
 app.Run();
