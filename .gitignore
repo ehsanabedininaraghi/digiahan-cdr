@@ -38,3 +38,5 @@ Source/appsettings.json
 Logs/
 _backups/
 *.log
+**/__pycache__/
+*.pyc

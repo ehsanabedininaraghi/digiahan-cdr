@@ -59,7 +59,10 @@ builder.Services.AddSingleton<SystemHealthService>();
 builder.Services.AddSingleton<DatabaseMaintenanceService>();
 builder.Services.AddSingleton<IntegrationSchedulerService>();
 builder.Services.AddSingleton<InvoiceNotificationRepository>();
+builder.Services.Configure<AiPipelineOptions>(builder.Configuration.GetSection("AiPipeline"));
+builder.Services.AddSingleton<AiPipelineRepository>();
 builder.Services.AddHostedService<IntegrationSchedulerWorker>();
+builder.Services.AddHostedService<AiCallDiscoveryWorker>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
