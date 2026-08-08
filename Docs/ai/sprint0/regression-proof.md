@@ -25,6 +25,10 @@ Additional checks:
 | `git diff --check` for release commit | PASS |
 | Local settings/log/runtime data staged | None |
 | Dedicated test project | Not found |
+| Approved WAV opened read-only | PASS |
+| WAV SHA-256 unchanged after inspection | PASS |
+| WAV last-write time unchanged after inspection | PASS |
+| Recording matched to RawCDR | PASS; 12-leg LinkedId group |
 
 ## Production safety statement
 

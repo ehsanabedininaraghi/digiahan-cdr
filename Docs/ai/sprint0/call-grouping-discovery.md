@@ -24,6 +24,12 @@ Both `LinkedId` and `UniqueId` are populated on every current row, so all 1,241 
 
 Observed high leg counts include 25, 36, 48, 60, 65, 72, 84 and 96 rows. These groups occurred within short call-time spans and are consistent with queue/local-channel fan-out, but they have not yet been manually validated as one business conversation.
 
+## Validated sample
+
+The approved recording matched a 12-row LinkedId group; internal identifiers remain local and are not exported. All 12 rows share the same recording reference. The audio duration (98.5 seconds) aligns with the main answered leg (`Duration=98`, `Billsec=92`) and the group maximum duration is 101 seconds.
+
+This validates ordinary multi-leg aggregation for one representative queue call. Extreme 48–96-leg groups remain unvalidated.
+
 ## Consequences
 
 1. `one RawCDR row = one call` is definitively false.

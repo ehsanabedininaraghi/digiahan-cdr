@@ -21,7 +21,13 @@ No absolute Linux, Windows, UNC or SFTP path is stored in `RawCDR`.
 
 ## Read-only access proof
 
-**Not completed.** There is no approved read-only SFTP/SSH account or mounted recording path available in the current environment. Reading an arbitrary production recording through AMI/root access was not attempted.
+**Completed for one user-approved copied PBX sample.** The sample was opened with read access only. SHA-256 and last-write time were checked before and after inspection and remained unchanged.
+
+- Database match: confirmed without exporting internal identifiers
+- Observed group: 12 CDR legs, one shared recording reference
+- Sample duration: 98.5 seconds
+
+This proves safe analyzer-side reading and database resolution for the approved sample. It does not yet prove a production SFTP/mount transport from Issabel.
 
 ## Required next action
 
@@ -31,4 +37,4 @@ Operations must provide one of:
 2. a read-only network export/mount, or
 3. one explicitly approved test recording plus its exact resolution rule.
 
-The account must not permit rename, delete or write. Sprint 1 remains blocked until one referenced file is resolved and opened read-only without modification.
+The account must not permit rename, delete or write. Production rollout remains blocked until the same resolution/read operation works through the intended Issabel transport.

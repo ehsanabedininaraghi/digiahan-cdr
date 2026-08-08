@@ -2,30 +2,34 @@
 
 ## Status
 
-Audio metadata could not be measured.
+Audio metadata was measured for one user-approved PBX recording sample using a read-only RIFF/WAVE parser. `ffmpeg` and `ffprobe` remain unavailable.
 
-Reasons:
+## Measured sample
 
-- recording references are relative filenames;
-- no read-only recording transport/root mapping is configured;
-- no approved test recording is locally available;
-- `ffmpeg` and `ffprobe` are not installed on the inspected Windows host.
+| Field | Value |
+|---|---:|
+| Container | RIFF/WAVE |
+| Codec | signed PCM, format code 1 |
+| Channels | 1 (mono) |
+| Sample rate | 8,000 Hz |
+| Bits per sample | 16 |
+| Byte rate | 16,000 bytes/s |
+| Audio data | 1,576,000 bytes |
+| Sample frames | 788,000 |
+| Calculated duration | 98.5 seconds |
+| RMS level | -16.55 dBFS |
+| Peak | 0 dBFS |
+| Exact-zero samples | 0.95% |
 
-## Known facts
-
-- SQL references use `.wav` consistently in the measured window.
-- `.wav` is a container/filename extension and does not prove the codec, sample rate, channel count or whether agent/customer are separated.
+The calculated duration agrees with the provided `00:01:38` description and the principal answered CDR leg (`Duration=98`). Mono audio means agent and customer are not available as separate channels; diarization or conversation-role mapping will be required.
 
 ## Still unknown
 
-- actual codec;
-- sample rate;
-- mono/stereo/channel layout;
-- whether RX/TX are separate channels;
+- codec/channel distribution across the population;
 - corrupt/truncated-file rate;
 - file size and audio-duration agreement;
 - read-while-write behavior on Issabel.
 
 ## Gate
 
-After read-only access is provided, inspect a small approved sample with `ffprobe` or an equivalent pre-approved tool. No package installation was performed during Sprint 0.
+After production read-only transport is provided, inspect a stratified sample rather than extrapolating from this single file. No package installation was performed during Sprint 0.

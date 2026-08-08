@@ -2,8 +2,8 @@
 
 | Unknown/risk | Why it matters | Resolution | Owner | Blocks Sprint 1? |
 |---|---|---|---|---|
-| No read-only recording transport | Recording cannot be resolved or staged | Restricted SFTP/mount and one approved test file | IT/VoIP | Yes |
-| Codec/channels/sample rate unknown | STT and diarization design cannot be selected | Inspect approved audio with ffprobe | IT/AI | Yes |
+| Production read-only recording transport absent | The approved copied sample works, but automated resolution from Issabel cannot run | Restricted SFTP/mount using the validated filename rule | IT/VoIP | Yes |
+| Population codec/channel distribution unknown | One sample is PCM 8 kHz/16-bit mono; other routes may differ | Inspect a stratified sample after transport is available | IT/AI | Yes |
 | Extreme groups up to 96 legs | Wrong grouping corrupts scores and KPIs | Trace representative LinkedIds against Issabel | VoIP/Backend | Yes |
 | 44 calls arrive over >90 seconds | Fixed stabilization loses late legs | Measure distribution and define reopen policy | Backend | Yes |
 | 23.45% logical calls lack recording reference | Discovery coverage may be much lower than expected | Classify by route/disposition and verify Issabel recording policy | VoIP/Sales | Yes |
