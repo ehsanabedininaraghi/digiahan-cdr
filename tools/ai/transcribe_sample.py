@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hotwords")
     parser.add_argument("--text-output", type=Path)
     parser.add_argument("--no-vad", action="store_true")
+    parser.add_argument("--quiet", action="store_true")
     return parser.parse_args()
 
 
@@ -109,7 +110,8 @@ def main() -> int:
             for segment in segments
         ]
         args.text_output.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if not args.quiet:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

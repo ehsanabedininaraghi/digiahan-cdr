@@ -38,6 +38,23 @@ BEGIN
         INCLUDE(IsBusinessRelevant,Direction,InternalExtension,Confidence);
 END;
 
+IF OBJECT_ID(N'dbo.AiExtractedFacts',N'U') IS NOT NULL
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.AiExtractedFacts')
+          AND name=N'CK_AiExtractedFacts_Type'
+    )
+        ALTER TABLE dbo.AiExtractedFacts DROP CONSTRAINT CK_AiExtractedFacts_Type;
+    ALTER TABLE dbo.AiExtractedFacts WITH CHECK ADD CONSTRAINT CK_AiExtractedFacts_Type CHECK
+    (
+        FactType IN
+        (N'PRODUCT',N'BRAND',N'SIZE',N'QUANTITY',N'PRICE',N'PAYMENT_DATE',N'ACTION',N'PERSON',
+         N'COMPANY',N'TOPIC',N'NON_PURCHASE_REASON',N'BEHAVIOR',N'RISK_SIGNAL',N'SENTIMENT',N'FOLLOW_UP')
+    );
+END;
+
 IF OBJECT_ID(N'dbo.AiExtractedFacts',N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.AiExtractedFacts
@@ -59,7 +76,8 @@ BEGIN
         CONSTRAINT CK_AiExtractedFacts_Type CHECK
         (
             FactType IN
-            (N'PRODUCT',N'BRAND',N'SIZE',N'QUANTITY',N'PRICE',N'PAYMENT_DATE',N'ACTION',N'PERSON',N'COMPANY',N'TOPIC')
+            (N'PRODUCT',N'BRAND',N'SIZE',N'QUANTITY',N'PRICE',N'PAYMENT_DATE',N'ACTION',N'PERSON',
+             N'COMPANY',N'TOPIC',N'NON_PURCHASE_REASON',N'BEHAVIOR',N'RISK_SIGNAL',N'SENTIMENT',N'FOLLOW_UP')
         ),
         CONSTRAINT CK_AiExtractedFacts_Confidence CHECK (Confidence>=0 AND Confidence<=1),
         CONSTRAINT CK_AiExtractedFacts_Review CHECK

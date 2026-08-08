@@ -17,7 +17,12 @@ No absolute Linux, Windows, UNC or SFTP path is stored in `RawCDR`.
 
 - The Windows host contains no call `.wav` files under `D:\DigiAhan\CDR4.0`.
 - Existing Issabel integration config contains the dashboard URL and AMI settings but no SFTP/SSH recording transport.
-- No mapping from relative `RecordingFile` to an Issabel recording root is configured in v4.3.1.
+- Issabel's live recording root is confirmed as `/var/spool/asterisk/monitor/`.
+- When `recordingfile` contains only a filename, Issabel extracts the `YYYYMMDD` token and resolves
+  `/var/spool/asterisk/monitor/YYYY/MM/DD/filename.wav`.
+- Confirmed example:
+  `/var/spool/asterisk/monitor/2026/08/09/exten-220-88451277-20260809-001218-1786221734.927.wav`.
+- The Monitoring HTTP endpoint is session-protected and resolves the same server-side path; it is not the ingestion transport.
 
 ## Read-only access proof
 
@@ -27,14 +32,9 @@ No absolute Linux, Windows, UNC or SFTP path is stored in `RawCDR`.
 - Observed group: 12 CDR legs, one shared recording reference
 - Sample duration: 98.5 seconds
 
-This proves safe analyzer-side reading and database resolution for the approved sample. It does not yet prove a production SFTP/mount transport from Issabel.
+This proves safe analyzer-side reading, database resolution and the live path rule. A production read-only SFTP credential is still required.
 
 ## Required next action
 
-Operations must provide one of:
-
-1. a restricted SFTP account rooted at the approved recording directory, or
-2. a read-only network export/mount, or
-3. one explicitly approved test recording plus its exact resolution rule.
-
-The account must not permit rename, delete or write. Production rollout remains blocked until the same resolution/read operation works through the intended Issabel transport.
+Operations must provide a restricted key-based SFTP account that can only read the approved monitor directory,
+plus a verified OpenSSH `known_hosts` entry for `192.168.8.2`. The account must not permit rename, delete or write.

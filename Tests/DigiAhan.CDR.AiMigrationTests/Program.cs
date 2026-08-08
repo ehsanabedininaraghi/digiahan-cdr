@@ -1,13 +1,16 @@
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Text.RegularExpressions;
+using DigiAhan.CDR.Receiver.Models;
+using DigiAhan.CDR.Receiver.Services;
 
 var migrationPaths = args.Length > 0
     ? args
     : new[]
     {
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiPipelineVNext.sql")),
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiAnalysisVNext.sql"))
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiAnalysisVNext.sql")),
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiRecordingSyncVNext.sql"))
     };
 foreach (var migrationPath in migrationPaths)
 {
@@ -16,8 +19,8 @@ foreach (var migrationPath in migrationPaths)
 }
 
 var databaseName = $"DigiAhan_AiPipeline_Test_{Environment.ProcessId}";
-var masterConnectionString = "Server=lpc:localhost;Database=master;Integrated Security=True;TrustServerCertificate=True;Pooling=False;";
-var testConnectionString = $"Server=lpc:localhost;Database={databaseName};Integrated Security=True;TrustServerCertificate=True;Pooling=False;";
+var masterConnectionString = "Server=lpc:localhost;Database=master;Integrated Security=True;Encrypt=False;Pooling=False;";
+var testConnectionString = $"Server=lpc:localhost;Database={databaseName};Integrated Security=True;Encrypt=False;Pooling=False;";
 
 await using var master = new SqlConnection(masterConnectionString);
 await master.OpenAsync();
@@ -31,6 +34,7 @@ try
         CREATE TABLE dbo.RawCDR
         (
             RawCDRId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            SourceServer nvarchar(100) NULL,
             Calldate datetime2(3) NULL,
             Duration int NULL,
             Billsec int NULL,
@@ -91,6 +95,11 @@ try
     Assert(reader.GetInt32(1) == 2, "Late-leg call did not create exactly two runs.");
     await reader.CloseAsync();
 
+    var recordingFirst = await DiscoverRecordingsAsync(test);
+    Assert(recordingFirst == (1, 1), $"Unexpected recording discovery: {recordingFirst}");
+    var recordingSecond = await DiscoverRecordingsAsync(test);
+    Assert(recordingSecond == (0, 0), $"Recording discovery idempotency failed: {recordingSecond}");
+
     await ExecuteAsync(test, """
         DECLARE @RunId bigint=(SELECT TOP(1) RunId FROM dbo.AiPipelineRuns ORDER BY RunId);
         INSERT dbo.AiCallAssessments
@@ -121,7 +130,56 @@ try
     Assert(analysisReader.GetInt32(1) == 1, "Fact was not stored exactly once.");
     Assert(analysisReader.GetInt32(2) == 1, "Review item was not stored exactly once.");
 
-    Console.WriteLine("AI pipeline and analysis migration integration test passed.");
+    var resolver = new IssabelRecordingPathResolver();
+    var resolved = resolver.ResolveRelativePath(
+        "exten-220-88451277-20260809-001218-1786221734.927.wav");
+    Assert(
+        resolved == "2026/08/09/exten-220-88451277-20260809-001218-1786221734.927.wav",
+        $"Issabel recording path resolution failed: {resolved}");
+    var traversalRejected = false;
+    try { resolver.ResolveRelativePath("../../etc/passwd.wav", DateTime.Today); }
+    catch (InvalidOperationException) { traversalRejected = true; }
+    Assert(traversalRejected, "Recording path traversal was not rejected.");
+
+    var analyzer = new AiTranscriptAnalyzer();
+    var analyzed = analyzer.Analyze(new AiAnalyzeRunRequest(
+        "سلام قیمت بالاست و فعلا خرید نمی‌کنم. پول را به حساب شخصی واریز کنم؟",
+        "[{\"start\":1.0,\"end\":8.0,\"text\":\"قیمت بالاست و فعلا خرید نمی‌کنم\"},{\"start\":9.0,\"end\":14.0,\"text\":\"پول را به حساب شخصی واریز کنم\"}]",
+        "fa", 14, 13, 2, "test", "test", null, null, null, null));
+    Assert(analyzed.Facts.Any(f => f.FactType == "NON_PURCHASE_REASON"), "Non-purchase reason was not extracted.");
+    Assert(analyzed.ReviewItems.Any(r => r.Category == "BRIBERY_OR_PERSONAL_PAYMENT"), "Sensitive payment signal was not queued for human review.");
+
+    var audioTestDirectory = Path.Combine(Path.GetTempPath(), $"digiahan-wav-test-{Environment.ProcessId}");
+    Directory.CreateDirectory(audioTestDirectory);
+    try
+    {
+        var validWav = Path.Combine(audioTestDirectory, "valid.wav.part-test");
+        await File.WriteAllBytesAsync(validWav,
+        [
+            (byte)'R',(byte)'I',(byte)'F',(byte)'F', 8,0,0,0,
+            (byte)'W',(byte)'A',(byte)'V',(byte)'E', 0,0,0,0
+        ]);
+        var validation = await new RecordingAudioValidator().ValidateWavAsync(
+            validWav, new FileInfo(validWav).Length, CancellationToken.None);
+        Assert(validation.SizeBytes == 16 && validation.Sha256.Length == 64, "WAV validation or SHA-256 failed.");
+
+        var invalidWav = Path.Combine(audioTestDirectory, "invalid.wav.part-test");
+        await File.WriteAllBytesAsync(invalidWav, "not-a-wave-file"u8.ToArray());
+        var invalidRejected = false;
+        try
+        {
+            await new RecordingAudioValidator().ValidateWavAsync(
+                invalidWav, new FileInfo(invalidWav).Length, CancellationToken.None);
+        }
+        catch (InvalidDataException) { invalidRejected = true; }
+        Assert(invalidRejected, "Invalid WAV header was not rejected.");
+    }
+    finally
+    {
+        if (Directory.Exists(audioTestDirectory)) Directory.Delete(audioTestDirectory, recursive: true);
+    }
+
+    Console.WriteLine("AI pipeline, daily recording ingestion and analysis integration test passed.");
 }
 finally
 {
@@ -148,6 +206,27 @@ static async Task<(int Discovered, int Finalized, int Queued)> DiscoverAsync(Sql
     if (!await reader.ReadAsync())
         throw new InvalidOperationException("Discovery returned no result.");
     return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+}
+
+static async Task<(int Assets, int Links)> DiscoverRecordingsAsync(SqlConnection connection)
+{
+    await using var dateCommand = new SqlCommand(
+        "SELECT CONVERT(date,StartedAt) FROM dbo.AiLogicalCalls WHERE CallKey=N'linked:l1';",
+        connection);
+    var targetDate = (DateTime)(await dateCommand.ExecuteScalarAsync()
+        ?? throw new InvalidOperationException("Logical call date was not found."));
+    await using var command = new SqlCommand("dbo.usp_AiDiscoverRecordingAssets", connection)
+    {
+        CommandType = CommandType.StoredProcedure,
+        CommandTimeout = 60
+    };
+    command.Parameters.Add("@TargetDate", SqlDbType.Date).Value = targetDate;
+    command.Parameters.Add("@SourceServer", SqlDbType.NVarChar, 100).Value = "issabel-primary";
+    command.Parameters.Add("@BatchSize", SqlDbType.Int).Value = 100;
+    await using var reader = await command.ExecuteReaderAsync();
+    if (!await reader.ReadAsync())
+        throw new InvalidOperationException("Recording discovery returned no result.");
+    return (reader.GetInt32(0), reader.GetInt32(1));
 }
 
 static void Assert(bool condition, string message)
