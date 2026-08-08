@@ -2,10 +2,18 @@ using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Text.RegularExpressions;
 
-var migrationPath = args.FirstOrDefault()
-    ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiPipelineVNext.sql"));
-if (!File.Exists(migrationPath))
-    throw new FileNotFoundException("Migration was not found.", migrationPath);
+var migrationPaths = args.Length > 0
+    ? args
+    : new[]
+    {
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiPipelineVNext.sql")),
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Source", "Sql", "AiAnalysisVNext.sql"))
+    };
+foreach (var migrationPath in migrationPaths)
+{
+    if (!File.Exists(migrationPath))
+        throw new FileNotFoundException("Migration was not found.", migrationPath);
+}
 
 var databaseName = $"DigiAhan_AiPipeline_Test_{Environment.ProcessId}";
 var masterConnectionString = "Server=lpc:localhost;Database=master;Integrated Security=True;TrustServerCertificate=True;Pooling=False;";
@@ -34,16 +42,17 @@ try
         CREATE INDEX IX_RawCDR_LinkedId ON dbo.RawCDR(LinkedId);
         """);
 
-    var migration = await File.ReadAllTextAsync(migrationPath);
-    foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+    foreach (var migrationPath in migrationPaths)
     {
-        if (!string.IsNullOrWhiteSpace(batch))
-            await ExecuteAsync(test, batch);
-    }
-    foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
-    {
-        if (!string.IsNullOrWhiteSpace(batch))
-            await ExecuteAsync(test, batch);
+        var migration = await File.ReadAllTextAsync(migrationPath);
+        for (var pass = 0; pass < 2; pass++)
+        {
+            foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(batch))
+                    await ExecuteAsync(test, batch);
+            }
+        }
     }
 
     await ExecuteAsync(test, """
@@ -80,8 +89,39 @@ try
     Assert(await reader.ReadAsync(), "Validated call was not found.");
     Assert(reader.GetString(0) == "FINALIZED", "Late-leg call did not return to FINALIZED.");
     Assert(reader.GetInt32(1) == 2, "Late-leg call did not create exactly two runs.");
+    await reader.CloseAsync();
 
-    Console.WriteLine("AI migration integration test passed.");
+    await ExecuteAsync(test, """
+        DECLARE @RunId bigint=(SELECT TOP(1) RunId FROM dbo.AiPipelineRuns ORDER BY RunId);
+        INSERT dbo.AiCallAssessments
+            (RunId,AudioClass,HasHumanSpeech,IsBusinessRelevant,Direction,InternalExtension,
+             QueueName,Confidence,SpeechSeconds,Summary,StructuredJson,AnalyzerVersion)
+        VALUES
+            (@RunId,N'BUSINESS_CONVERSATION',1,1,N'INBOUND',N'201',N'400',0.82,91.0,
+             N'test',N'{"schema_version":"1.0"}',N'integration-test');
+        DECLARE @AssessmentId bigint=SCOPE_IDENTITY();
+        INSERT dbo.AiExtractedFacts
+            (AssessmentId,FactType,RawValue,NormalizedValue,Unit,StartSeconds,EndSeconds,
+             Confidence,ReviewStatus,ExtractionVersion)
+        VALUES(@AssessmentId,N'QUANTITY',N'fifteen',N'15',N'BRANCH',1,2,0.75,N'REVIEW',N'integration-test');
+        INSERT dbo.AiReviewItems
+            (AssessmentId,Category,Priority,ReasonCode,RawText,StartSeconds,EndSeconds,ReviewStatus)
+        VALUES(@AssessmentId,N'NUMERIC',N'HIGH',N'UNIT_UNKNOWN',N'fifteen',1,2,N'OPEN');
+        """);
+
+    await using var analysisVerification = new SqlCommand("""
+        SELECT
+            (SELECT COUNT(*) FROM dbo.AiCallAssessments),
+            (SELECT COUNT(*) FROM dbo.AiExtractedFacts),
+            (SELECT COUNT(*) FROM dbo.AiReviewItems);
+        """, test);
+    await using var analysisReader = await analysisVerification.ExecuteReaderAsync();
+    Assert(await analysisReader.ReadAsync(), "Analysis verification returned no result.");
+    Assert(analysisReader.GetInt32(0) == 1, "Assessment was not stored exactly once.");
+    Assert(analysisReader.GetInt32(1) == 1, "Fact was not stored exactly once.");
+    Assert(analysisReader.GetInt32(2) == 1, "Review item was not stored exactly once.");
+
+    Console.WriteLine("AI pipeline and analysis migration integration test passed.");
 }
 finally
 {

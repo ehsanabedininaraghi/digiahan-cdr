@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--initial-prompt")
     parser.add_argument("--hotwords")
     parser.add_argument("--text-output", type=Path)
+    parser.add_argument("--no-vad", action="store_true")
     return parser.parse_args()
 
 
@@ -51,7 +52,7 @@ def main() -> int:
         str(args.audio),
         language="fa",
         beam_size=5,
-        vad_filter=True,
+        vad_filter=not args.no_vad,
         word_timestamps=True,
         condition_on_previous_text=True,
         initial_prompt=args.initial_prompt,
