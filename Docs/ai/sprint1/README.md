@@ -8,6 +8,8 @@
 - A new source maximum raw CDR ID creates at most one new pipeline run.
 - Calls with zero or multiple recording references are not queued for audio work.
 - A bounded discovery worker and configuration are present.
+- An isolated SQL integration test covers repeatable migration, idempotent
+  discovery, recording-reference filtering, and late-leg reprocessing.
 - The worker is disabled by default; v4.3.1 behavior is unchanged until migration,
   operational validation, and explicit enablement.
 
