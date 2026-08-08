@@ -104,6 +104,7 @@ public sealed class AiAnalysisRepository
                   (SELECT 1 FROM dbo.AiReviewItems q
                    WHERE q.AssessmentId=a.AssessmentId AND q.ReviewStatus=@review))
               AND (@search IS NULL OR c.CallKey LIKE N'%'+@search+N'%'
+                   OR c.RecordingFile LIKE N'%'+@search+N'%'
                    OR a.Summary LIKE N'%'+@search+N'%'
                    OR t.TranscriptText LIKE N'%'+@search+N'%'
                    OR EXISTS (SELECT 1 FROM dbo.AiExtractedFacts s
@@ -178,15 +179,20 @@ public sealed class AiAnalysisRepository
     public async Task<IReadOnlyList<AiReviewView>> ListReviewsAsync(
         string? status, int take, CancellationToken ct)
     {
+        var normalizedStatus = string.IsNullOrWhiteSpace(status)
+            ? "OPEN"
+            : status.Trim().ToUpperInvariant();
         await using var connection = await OpenAsync(ct);
         return await ReadReviewsAsync(connection, null, null,
-            string.IsNullOrWhiteSpace(status) ? "OPEN" : status.Trim().ToUpperInvariant(),
+            normalizedStatus == "ALL" ? null : normalizedStatus,
             ct, Math.Clamp(take, 1, 500));
     }
 
     public async Task<bool> ResolveReviewAsync(
         long reviewItemId, AiReviewResolutionRequest request, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(request.Status))
+            throw new ArgumentException("Review status is required.");
         var status = request.Status.Trim().ToUpperInvariant();
         if (status is not ("CONFIRMED" or "CORRECTED" or "REJECTED" or "DEFERRED"))
             throw new ArgumentException("Invalid review status.");

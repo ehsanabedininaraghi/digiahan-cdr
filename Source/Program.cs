@@ -151,6 +151,7 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
+app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
