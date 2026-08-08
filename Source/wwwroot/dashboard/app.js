@@ -3,6 +3,7 @@ const fa = n => new Intl.NumberFormat('fa-IR').format(n || 0);
 let timer;
 let currentPage = 1;
 const callPageSize = 50;
+const requestTimings = {};
 
 const extensionNames = {
   "201":"مجید","202":"مجید","203":"شافوری","204":"شافوری","205":"ایلیا","206":"ایلیا",
@@ -61,7 +62,9 @@ function esc(v) {
 }
 
 async function get(url) {
+    const started = performance.now();
     const response = await fetch(url, { cache: 'no-store' });
+    requestTimings[url.split('?')[0]] = Math.round(performance.now() - started);
     if (!response.ok) throw new Error(await response.text());
     return response.json();
 }
@@ -115,9 +118,11 @@ async function load() {
         calls: get(`/api/dashboard/calls?${base}&search=${encodeURIComponent($('search').value)}&status=${$('status').value}&page=${currentPage}&pageSize=${callPageSize}`),
         sync: get('/api/dashboard/sync'),
         version: get('/api/version'),
-        salesSummary: get('/api/sales/summary'),
-        salesVisitors: get('/api/sales/by-visitor'),
-        salesInvoices: get('/api/sales/recent-invoices?take=25')
+        salesSummary: get(`/api/sales/summary?${base}`),
+        salesVisitors: get(`/api/sales/by-visitor?${base}`),
+        salesInvoices: get(`/api/sales/recent-invoices?${base}&take=25`),
+        sellerPerformance: get(`/api/dashboard/seller-performance?${base}`),
+        systemHealth: get('/api/system/health')
     };
 
     $('rangeCaption').textContent = `گزارش از ${dateOnly($('startDate').value)} تا ${dateOnly($('endDate').value)}${$('extension').value !== 'all' ? ` برای داخلی ${$('extension').value}` : ''}`;
@@ -174,8 +179,8 @@ async function load() {
 
     if (data.extensions) {
         $('extRows').innerHTML = data.extensions.length
-            ? data.extensions.map(x => `<tr><td><b>${esc(x.extension)}</b></td><td>${esc(extensionNames[x.extension] || '—')}</td><td>${fa(x.total)}</td><td>${fa(x.answered)}</td><td>${fa(x.missed)}</td><td>${sec(x.talkSeconds)}</td><td>${sec(x.averageTalkSeconds)}</td></tr>`).join('')
-            : '<tr><td colspan="7">داده‌ای نیست</td></tr>';
+            ? data.extensions.map(x => `<tr><td><b>${esc(x.extension)}</b></td><td>${esc(extensionNames[x.extension] || '—')}</td><td>${fa(x.total)}</td><td><b class="direction-in">${fa(x.inbound)}</b></td><td><b class="direction-out">${fa(x.outbound)}</b></td><td>${fa(x.answered)}</td><td>${fa(x.missed)}</td><td>${sec(x.talkSeconds)}</td><td>${sec(x.averageTalkSeconds)}</td></tr>`).join('')
+            : '<tr><td colspan="9">داده‌ای نیست</td></tr>';
     }
 
     if (data.calls) {
@@ -185,16 +190,15 @@ async function load() {
             ? calls.items.map(x => `<tr class="${x.isNewCustomer ? 'new-customer-row' : ''}">
                 <td>${dt(x.calldate)}</td><td><b>${esc(x.src || '—')}</b></td><td>${esc(x.dst || '—')}</td>
                 <td>${customerCell(x)}</td><td>${x.companyName ? esc(x.companyName) : '—'}</td>
-                <td>${x.ownerName ? esc(x.ownerName) : '—'}</td>
                 <td>${x.direction === 'inbound' ? 'ورودی' : x.direction === 'outbound' ? 'خروجی' : 'داخلی/نامشخص'}</td>
                 <td><span class="badge ${(x.disposition === 'ANSWERED' || x.billsec > 0) ? 'ok' : 'bad'}">${(x.disposition === 'ANSWERED' || x.billsec > 0) ? 'پاسخ' : 'بی‌پاسخ'}</span></td>
                 <td>${sec(x.duration)}</td><td>${sec(x.billsec)}</td>
                 <td>${x.recordingFile ? '<span class="record" title="مسیر ضبط ثبت شده">●</span>' : '—'}</td>
             </tr>`).join('')
-            : '<tr><td colspan="11">داده‌ای یافت نشد</td></tr>';
+            : '<tr><td colspan="10">داده‌ای یافت نشد</td></tr>';
     } else {
         $('callCount').textContent = 'خطا در دریافت تماس‌ها';
-        $('callRows').innerHTML = '<tr><td colspan="11">بخش تماس‌ها موقتاً در دسترس نیست.</td></tr>';
+        $('callRows').innerHTML = '<tr><td colspan="10">بخش تماس‌ها موقتاً در دسترس نیست.</td></tr>';
     }
 
     if (data.sync) {
@@ -225,9 +229,7 @@ async function load() {
 
         const hasAccountingData = Number(s.invoiceCount || 0) > 0;
         const latestSyncSucceeded = s.lastSyncStatus === 'SUCCESS';
-        const latestFactorDate = data.salesInvoices && data.salesInvoices.length
-            ? data.salesInvoices[0].factorDate
-            : null;
+        const latestFactorDate = s.latestFactorDate;
 
         if (s.connected && latestSyncSucceeded) {
             $('accountingSyncDot').style.background = '#38d39f';
@@ -276,6 +278,43 @@ async function load() {
               </tr>`).join('')
             : '<tr><td colspan="6">فاکتوری وجود ندارد</td></tr>';
     }
+
+    if (data.sellerPerformance) {
+        $('sellerPerformanceRows').innerHTML = data.sellerPerformance.length
+            ? data.sellerPerformance.map(x => `<tr>
+                <td><b>${esc(x.extension)}</b></td><td>${esc(extensionNames[x.extension] || '—')}</td>
+                <td>${fa(x.followUps)}</td><td>${fa(x.quotes)}</td><td>${fa(x.orders)}</td>
+                <td>${fa(x.noNeed)}</td><td>${fa(x.notes)}</td><td><b>${fa(x.totalOutcomes)}</b></td>
+              </tr>`).join('')
+            : '<tr><td colspan="8">در این بازه نتیجه‌ای ثبت نشده است</td></tr>';
+    }
+
+    if (data.systemHealth) {
+        const h = data.systemHealth;
+        $('healthSql').textContent = h.sqlStatus;
+        $('healthDatabaseSize').textContent = `حجم دیتابیس: ${fa(h.databaseSizeMb)} MB`;
+        $('healthDidar').textContent = h.didarStatus;
+        $('healthDidarCount').textContent = `${fa(h.didarContacts)} مخاطب | ${fa(h.didarPhones)} تلفن`;
+        $('healthIssabel').textContent = h.issabelStatus;
+        $('healthLastCdr').textContent = `آخرین CDR: ${dt(h.lastCdrAt)}`;
+        $('healthAccounting').textContent = h.accountingStatus;
+        $('healthLastAccounting').textContent = `آخرین موفق: ${dt(h.lastAccountingSyncAtUtc)} | فاکتور: ${h.lastAccountingFactorDate || '—'}`;
+        $('healthLog').textContent = `${fa(h.logSizeMb)} MB`;
+        $('healthRecovery').textContent = `Recovery: ${h.recoveryModel}`;
+        $('healthJobRows').innerHTML = h.jobs.map(x => `<tr>
+            <td><b>${esc(x.displayName)}</b><small>${esc(x.jobKey)}</small></td>
+            <td>${fa(x.intervalMinutes)} دقیقه</td>
+            <td><span class="badge ${x.lastStatus === 'SUCCESS' ? 'ok' : x.lastStatus === 'FAILED' ? 'bad' : 'neutral'}">${esc(x.lastStatus || 'در انتظار')}</span></td>
+            <td>${dt(x.lastFinishedAtUtc || x.lastStartedAtUtc)}</td>
+            <td>${x.lastDurationMs == null ? '—' : `${fa(x.lastDurationMs)} ms`}</td>
+            <td>${dt(x.nextRunAtUtc)}</td>
+            <td class="health-error">${esc(x.lastError || '—')}</td>
+          </tr>`).join('');
+    }
+
+    $('queryMetrics').textContent = Object.entries(requestTimings)
+        .map(([name, duration]) => `${name.replace('/api/', '')}: ${fa(duration)} ms`)
+        .join(' | ');
 }
 
 function toast(text) {

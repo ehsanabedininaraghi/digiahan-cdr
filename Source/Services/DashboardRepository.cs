@@ -92,7 +92,8 @@ public sealed class DashboardRepository
         while (await reader.ReadAsync(ct))
             items.Add(new ExtensionStat(
                 GetString(reader, "E") ?? string.Empty,
-                GetInt(reader, "T"), GetInt(reader, "A"), GetInt(reader, "M"),
+                GetInt(reader, "T"), GetInt(reader, "I"), GetInt(reader, "O"),
+                GetInt(reader, "A"), GetInt(reader, "M"),
                 GetInt(reader, "B"), GetInt(reader, "Av")));
 
         return items;
@@ -183,6 +184,39 @@ public sealed class DashboardRepository
         }
 
         return new SyncStatus(started, finished, batchStatus, inserted, duplicates, errors, lastReceived, lastCdr, rowsLastHour);
+    }
+
+    public async Task<IReadOnlyList<SellerPerformanceRow>> SellerPerformance(
+        DateTime startDate, DateTime endDate, string? extension, CancellationToken ct)
+    {
+        const string sql = """
+            SELECT
+                Extension,
+                SUM(CASE WHEN Outcome=N'FOLLOW_UP' THEN 1 ELSE 0 END) AS FollowUps,
+                SUM(CASE WHEN Outcome=N'QUOTED' THEN 1 ELSE 0 END) AS Quotes,
+                SUM(CASE WHEN Outcome=N'ORDER' THEN 1 ELSE 0 END) AS Orders,
+                SUM(CASE WHEN Outcome=N'NO_NEED' THEN 1 ELSE 0 END) AS NoNeed,
+                SUM(CASE WHEN NULLIF(LTRIM(RTRIM(Note)),N'') IS NOT NULL THEN 1 ELSE 0 END) AS Notes,
+                COUNT(*) AS TotalOutcomes
+            FROM dbo.AgentCallOutcomes
+            WHERE CreatedAtUtc>=@s AND CreatedAtUtc<@e
+              AND (@ext=N'all' OR Extension=@ext)
+            GROUP BY Extension
+            ORDER BY Orders DESC,Quotes DESC,FollowUps DESC,Extension;
+            """;
+        var rows = new List<SellerPerformanceRow>();
+        await using var connection = await OpenConnection(ct);
+        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 30 };
+        command.Parameters.Add("@s", SqlDbType.DateTime2).Value = startDate.Date;
+        command.Parameters.Add("@e", SqlDbType.DateTime2).Value = endDate.Date.AddDays(1);
+        command.Parameters.Add("@ext", SqlDbType.NVarChar, 20).Value =
+            string.IsNullOrWhiteSpace(extension) ? "all" : extension.Trim();
+        await using var reader = await ExecuteReader(command, "SellerPerformance", ct);
+        while (await reader.ReadAsync(ct))
+            rows.Add(new SellerPerformanceRow(
+                reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3),
+                reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6)));
+        return rows;
     }
 
     private async Task<SqlConnection> OpenConnection(CancellationToken ct)

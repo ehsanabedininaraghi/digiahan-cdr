@@ -189,6 +189,7 @@ public sealed class AccountingSyncService
                 f.fdate,
                 f.typeindex,
                 f.type,
+                f.description AS FactorDescription,
                 f.customercode,
                 f.customername,
                 f.amount,
@@ -217,6 +218,7 @@ public sealed class AccountingSyncService
                 Convert.ToString(reader["fdate"]),
                 NullableInt(reader["typeindex"]),
                 Convert.ToString(reader["type"]),
+                Convert.ToString(reader["FactorDescription"]),
                 Convert.ToString(reader["customercode"]),
                 Convert.ToString(reader["detailcode"]),
                 Convert.ToString(reader["customername"]),
@@ -389,17 +391,18 @@ public sealed class AccountingSyncService
             const string sql = """
                 INSERT INTO dbo.AccountingInvoices
                     (SourceDatabase,FiscalYear,FactorCode,DocumentNumber,FactorNumber,FactorDate,
-                     TypeIndex,TypeDescription,CustomerShortCode,CustomerDetailCode,CustomerName,
+                     TypeIndex,TypeDescription,FactorDescription,CustomerShortCode,CustomerDetailCode,CustomerName,
                      Amount,VisitorId,VisitorName,ImportedAtUtc)
                 VALUES
-                    (@db,@fy,@code,@doc,@factor,@date,@typeIndex,@type,@short,@detail,@customer,
+                    (@db,@fy,@code,@doc,@factor,@date,@typeIndex,@type,@factorDescription,@short,@detail,@customer,
                      @amount,@visitorId,@visitorName,SYSUTCDATETIME());
                 """;
             await ExecuteAsync(destination, transaction, sql, ct,
                 ("@db", sourceDatabase), ("@fy", fiscalYear), ("@code", invoice.FactorCode),
                 ("@doc", invoice.DocumentNumber), ("@factor", invoice.FactorNumber),
                 ("@date", invoice.FactorDate), ("@typeIndex", invoice.TypeIndex),
-                ("@type", invoice.TypeDescription), ("@short", invoice.CustomerShortCode),
+                ("@type", invoice.TypeDescription), ("@factorDescription", invoice.FactorDescription),
+                ("@short", invoice.CustomerShortCode),
                 ("@detail", invoice.CustomerDetailCode), ("@customer", invoice.CustomerName),
                 ("@amount", invoice.Amount), ("@visitorId", invoice.VisitorId),
                 ("@visitorName", invoice.VisitorName));
@@ -498,7 +501,7 @@ public sealed class AccountingSyncService
         string? EconomicCode, string? CustomerTel, string? CustomerAddress);
     private sealed record InvoiceRow(
         int FactorCode, decimal? DocumentNumber, decimal? FactorNumber, string? FactorDate,
-        int? TypeIndex, string? TypeDescription, string? CustomerShortCode,
+        int? TypeIndex, string? TypeDescription, string? FactorDescription, string? CustomerShortCode,
         string? CustomerDetailCode, string? CustomerName, decimal? Amount,
         int? VisitorId, string? VisitorName);
     private sealed record ItemRow(

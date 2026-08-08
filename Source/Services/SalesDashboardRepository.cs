@@ -15,9 +15,10 @@ public sealed class SalesDashboardRepository
             ?? throw new InvalidOperationException("ConnectionStrings:DigiAhanCdr is missing.");
     }
 
-    public async Task<SalesDashboardSummary> Summary(CancellationToken ct)
+    public async Task<SalesDashboardSummary> Summary(DateTime startDate, DateTime endDate, CancellationToken ct)
     {
-        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
+        var start = ToPersianDate(startDate.Date);
+        var end = ToPersianDate(endDate.Date);
 
         const string sql = """
         SELECT
@@ -41,19 +42,21 @@ public sealed class SalesDashboardRepository
             ISNULL(AVG(NULLIF(Amount,0)),0) AS AverageInvoice,
             COUNT(DISTINCT VisitorId) AS VisitorCount,
             ISNULL(MAX(SourceDatabase),N'daftar1405') AS SourceDatabase,
-            ISNULL(MAX(FiscalYear),1405) AS FiscalYear
+            ISNULL(MAX(FiscalYear),1405) AS FiscalYear,
+            MAX(FactorDate) AS LatestFactorDate
         FROM dbo.AccountingInvoices
-        WHERE FactorDate>=@cutoff;
+        WHERE FactorDate>=@start AND FactorDate<=@end;
         """;
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
+        command.Parameters.Add("@start", SqlDbType.NVarChar, 10).Value = start;
+        command.Parameters.Add("@end", SqlDbType.NVarChar, 10).Value = end;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         if (!await reader.ReadAsync(ct))
-            return new SalesDashboardSummary(false, null, null, 0, 0, 0, 0, 0, "daftar1405", 1405);
+            return new SalesDashboardSummary(false, null, null, 0, 0, 0, 0, 0, "daftar1405", 1405, null);
 
         return new SalesDashboardSummary(
             reader.GetBoolean(0),
@@ -65,12 +68,14 @@ public sealed class SalesDashboardRepository
             reader.GetDecimal(6),
             reader.GetInt32(7),
             reader.GetString(8),
-            reader.GetInt32(9));
+            reader.GetInt32(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10));
     }
 
-    public async Task<IReadOnlyList<SalesByVisitorRow>> ByVisitor(CancellationToken ct)
+    public async Task<IReadOnlyList<SalesByVisitorRow>> ByVisitor(DateTime startDate, DateTime endDate, CancellationToken ct)
     {
-        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
+        var start = ToPersianDate(startDate.Date);
+        var end = ToPersianDate(endDate.Date);
 
         const string sql = """
         SELECT
@@ -86,7 +91,7 @@ public sealed class SalesDashboardRepository
           ON i.SourceDatabase=v.SourceDatabase
          AND i.FiscalYear=v.FiscalYear
          AND i.VisitorId=v.VisitorId
-         AND i.FactorDate>=@cutoff
+         AND i.FactorDate>=@start AND i.FactorDate<=@end
         GROUP BY v.VisitorId,v.VisitorName,v.RoleType,v.IsActive
         ORDER BY TotalSales DESC,v.VisitorId;
         """;
@@ -95,7 +100,8 @@ public sealed class SalesDashboardRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
+        command.Parameters.Add("@start", SqlDbType.NVarChar, 10).Value = start;
+        command.Parameters.Add("@end", SqlDbType.NVarChar, 10).Value = end;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         while (await reader.ReadAsync(ct))
@@ -114,11 +120,14 @@ public sealed class SalesDashboardRepository
     }
 
     public async Task<IReadOnlyList<RecentInvoiceRow>> RecentInvoices(
+        DateTime startDate,
+        DateTime endDate,
         int take,
         CancellationToken ct)
     {
         take = Math.Clamp(take,1,100);
-        var cutoff = ToPersianDate(DateTime.Today.AddDays(-29));
+        var start = ToPersianDate(startDate.Date);
+        var end = ToPersianDate(endDate.Date);
 
         const string sql = """
         SELECT TOP(@take)
@@ -136,7 +145,7 @@ public sealed class SalesDashboardRepository
           ON ii.SourceDatabase=i.SourceDatabase
          AND ii.FiscalYear=i.FiscalYear
          AND ii.FactorCode=i.FactorCode
-        WHERE i.FactorDate>=@cutoff
+        WHERE i.FactorDate>=@start AND i.FactorDate<=@end
         GROUP BY
             i.FactorCode,i.FactorNumber,i.FactorDate,i.CustomerDetailCode,
             i.CustomerName,i.Amount,i.VisitorId,i.VisitorName
@@ -148,7 +157,8 @@ public sealed class SalesDashboardRepository
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@take", SqlDbType.Int).Value = take;
-        command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
+        command.Parameters.Add("@start", SqlDbType.NVarChar, 10).Value = start;
+        command.Parameters.Add("@end", SqlDbType.NVarChar, 10).Value = end;
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         while (await reader.ReadAsync(ct))

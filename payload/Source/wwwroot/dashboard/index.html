@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>داشبورد تماس دیجی‌آهن</title>
-<link rel="stylesheet" href="style.css?v=374">
+<link rel="stylesheet" href="style.css?v=431">
 </head>
 <body>
 <div class="shell">
 <aside>
   <div class="brand"><img class="brand-logo" src="assets/digiahan-logo.png" alt="لوگوی دیجی‌آهن"><div class="brand-title"><b>دیجی‌آهن</b><small>مدیریت تماس‌ها</small></div></div>
-  <nav><a class="active">داشبورد</a><a href="#calls">تماس‌ها</a><a href="#extensions">داخلی‌ها</a><a href="#trend">گزارش زمانی</a><a href="#sales">فروش</a></nav>
+  <nav><a class="active">داشبورد</a><a href="#calls">تماس‌ها</a><a href="#extensions">فروشنده‌ها</a><a href="#sales">فروش</a><a href="/invoice-notifications">ارسال اطلاعات خرید</a><a href="#system-health">سلامت سیستم</a><a href="#trend">روند روزانه</a></nav>
   <div class="sync"><span id="syncDot"></span><div><b id="syncText">در حال بررسی</b><small id="syncTime">...</small></div></div>
   <div class="sync accounting-sync"><span id="accountingSyncDot"></span><div><b id="accountingSyncText">در حال بررسی حسابداری</b><small id="accountingSyncTime">...</small></div></div>
 </aside>
 <main>
 <header>
-  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v3.7.4</span></h1><p>گزارش تماس‌ها، مشتریان و عملکرد داخلی‌ها</p></div>
+  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v4.3.1</span></h1><p>گزارش تماس‌ها، مشتریان، فروش و سلامت اتصال‌ها</p></div>
 </header>
 
 <section class="panel filter-panel">
@@ -67,19 +67,19 @@
 <article class="panel"><div class="panel-head"><div><h2>نرخ پاسخ</h2><p>ترکیب نتیجه تماس‌ها</p></div></div><div id="donut" class="donut"><div><b id="donutValue">۰٪</b><span>پاسخ</span></div></div><div class="legend"><span><i class="ok"></i>پاسخ داده‌شده</span><span><i class="bad"></i>از دست‌رفته</span></div></article>
 </section>
 
-<section id="trend" class="panel">
-<div class="panel-head"><div><h2>روند روزانه</h2><p>مقایسه روزهای بازه انتخاب‌شده</p></div></div>
-<div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>کل</th><th>پاسخ</th><th>بی‌پاسخ</th><th>ورودی</th><th>خروجی</th><th>مشتری جدید</th><th>شناخته‌شده</th><th>مکالمه</th></tr></thead><tbody id="dailyRows"></tbody></table></div>
-</section>
-
 <section id="extensions" class="panel">
 <div class="panel-head"><div><h2>عملکرد داخلی‌ها / فروشنده‌ها</h2><p>رتبه‌بندی در بازه انتخاب‌شده</p></div></div>
-<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>کل</th><th>پاسخ</th><th>از دست‌رفته</th><th>مکالمه</th><th>میانگین</th></tr></thead><tbody id="extRows"></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>کل</th><th>ورودی</th><th>خروجی</th><th>پاسخ</th><th>از دست‌رفته</th><th>مکالمه</th><th>میانگین</th></tr></thead><tbody id="extRows"></tbody></table></div>
+</section>
+
+<section id="seller-performance" class="panel">
+<div class="panel-head"><div><h2>گزارش عملکرد فروشنده‌ها</h2><p>نتیجه‌های ثبت‌شده در همان بازه انتخاب‌شده</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>پیگیری</th><th>قیمت داده شد</th><th>سفارش</th><th>عدم نیاز</th><th>یادداشت</th><th>کل نتیجه‌ها</th></tr></thead><tbody id="sellerPerformanceRows"></tbody></table></div>
 </section>
 
 <section id="sales" class="panel sales-panel">
   <div class="panel-head">
-    <div><h2>فروش ۳۰ روز اخیر</h2><p id="salesCaption">اطلاعات واقعی از حسابداری دفتر ۱۴۰۵</p></div>
+    <div><h2>گزارش فروش در بازه انتخاب‌شده</h2><p id="salesCaption">اطلاعات واقعی از حسابداری دفتر ۱۴۰۵</p></div>
   </div>
 
   <section class="cards sales-cards">
@@ -98,7 +98,7 @@
       </table></div>
     </article>
     <article class="panel wide">
-      <div class="panel-head"><div><h2>آخرین فاکتورهای فروش</h2><p>۳۰ روز اخیر</p></div></div>
+      <div class="panel-head"><div><h2>فاکتورهای فروش</h2><p>در بازه انتخاب‌شده</p></div></div>
       <div class="table-wrap"><table>
         <thead><tr><th>تاریخ</th><th>شماره</th><th>مشتری</th><th>ویزیتور</th><th>اقلام</th><th>مبلغ</th></tr></thead>
         <tbody id="salesInvoiceRows"></tbody>
@@ -108,14 +108,32 @@
 </section>
 <section id="calls" class="panel">
 <div class="panel-head call-head"><div><h2>تماس‌های یکتا و قابل پیگیری</h2><p id="callCount">...</p></div>
-<div class="filters"><input id="search" placeholder="شماره، نام، شرکت، مسئول یا LinkedID"><select id="status"><option value="all">همه وضعیت‌ها</option><option value="answered">پاسخ داده‌شده</option><option value="missed">از دست‌رفته</option><option value="new">فقط مشتری جدید</option><option value="known">فقط مشتریان شناسایی‌شده</option></select></div></div>
-<div class="table-wrap"><table><thead><tr><th>زمان</th><th>مبدأ</th><th>مقصد</th><th>نام مشتری</th><th>شرکت</th><th>مسئول</th><th>جهت</th><th>وضعیت</th><th>مدت</th><th>مکالمه</th><th>ضبط</th></tr></thead><tbody id="callRows"></tbody></table></div>
+<div class="filters"><input id="search" placeholder="شماره، نام، شرکت، کد دیدار یا LinkedID"><select id="status"><option value="all">همه وضعیت‌ها</option><option value="answered">پاسخ داده‌شده</option><option value="missed">از دست‌رفته</option><option value="new">فقط مشتری جدید</option><option value="known">فقط مشتریان شناسایی‌شده</option></select></div></div>
+<div class="table-wrap"><table><thead><tr><th>زمان</th><th>مبدأ</th><th>مقصد</th><th>نام مشتری</th><th>شرکت</th><th>جهت</th><th>وضعیت</th><th>مدت</th><th>مکالمه</th><th>ضبط</th></tr></thead><tbody id="callRows"></tbody></table></div>
 </section>
 
-<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v3.7.4</span></footer>
+<section id="system-health" class="panel">
+<div class="panel-head"><div><h2>System Health</h2><p>وضعیت اتصال‌ها، زمان‌بندی دیتابیسی و اندازه لاگ SQL</p></div></div>
+<section class="cards health-cards">
+  <article><span>SQL</span><strong id="healthSql">...</strong><small id="healthDatabaseSize">...</small></article>
+  <article><span>Didar</span><strong id="healthDidar">...</strong><small id="healthDidarCount">...</small></article>
+  <article><span>Issabel</span><strong id="healthIssabel">...</strong><small id="healthLastCdr">...</small></article>
+  <article><span>Accounting</span><strong id="healthAccounting">...</strong><small id="healthLastAccounting">...</small></article>
+  <article><span>SQL Log</span><strong id="healthLog">...</strong><small id="healthRecovery">...</small></article>
+</section>
+<div class="table-wrap"><table><thead><tr><th>اتصال / کار</th><th>فاصله اجرا</th><th>وضعیت</th><th>آخرین اجرا</th><th>مدت</th><th>اجرای بعد</th><th>خطا</th></tr></thead><tbody id="healthJobRows"></tbody></table></div>
+<div class="query-metrics"><b>زمان پاسخ APIها در همین بارگذاری:</b><span id="queryMetrics">...</span></div>
+</section>
+
+<section id="trend" class="panel">
+<div class="panel-head"><div><h2>روند روزانه</h2><p>مقایسه روزهای بازه انتخاب‌شده</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>کل</th><th>پاسخ</th><th>بی‌پاسخ</th><th>ورودی</th><th>خروجی</th><th>مشتری جدید</th><th>شناخته‌شده</th><th>مکالمه</th></tr></thead><tbody id="dailyRows"></tbody></table></div>
+</section>
+
+<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v4.3.1</span></footer>
 </main>
 </div>
 <div id="toast"></div>
-<script src="app.js?v=374"></script>
+<script src="app.js?v=431"></script>
 </body>
 </html>

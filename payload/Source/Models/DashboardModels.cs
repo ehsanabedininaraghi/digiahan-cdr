@@ -30,6 +30,8 @@ public sealed record DailyPoint(
 public sealed record ExtensionStat(
     string Extension,
     int Total,
+    int Inbound,
+    int Outbound,
     int Answered,
     int Missed,
     int TalkSeconds,
