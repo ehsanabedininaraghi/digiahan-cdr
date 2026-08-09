@@ -21,6 +21,8 @@ const extensionCsv=agent.extensions.join(",");
 let currentCard=null,selectedOutcome="";
 let lastSequence=Number(sessionStorage.getItem(`agent-seq-${primary}`)||0);
 let firstPoll=true;
+let pollInFlight=false;
+let consecutivePollFailures=0;
 
 document.title=`پنل فروش ${agent.name}`;
 $("agentTitle").textContent=`${agent.name} · داخلی ${agent.extensions.join(" و ")}${agent.product?` · ${agent.product}`:""}`;
@@ -45,7 +47,35 @@ $("temperature").className=`temperature ${(c.temperature||"COLD").toLowerCase()}
 if(showPopup){setText("popupName",c.customerName||c.companyName||"مشتری جدید");setText("popupPhone",c.callerNumber);setText("popupHint",c.suggestedOpening||"");$("popupSignals").innerHTML=`<span>رتبه ${esc(c.customerRank||"NEW")}</span><span>${esc(tempLabel(c.temperature))}</span>${c.lastProduct?`<span>${esc(c.lastProduct)}</span>`:""}`;$("popup").classList.remove("hidden");if("Notification"in window&&Notification.permission==="granted")new Notification(`تماس ورودی برای ${agent.name}`,{body:`${c.customerName||c.companyName||"مشتری جدید"}\n${c.callerNumber}`})}
 }
 
-async function pollCurrent(){try{const results=await Promise.all(agent.extensions.map(async ext=>{const r=await fetch(`/api/agent/${encodeURIComponent(ext)}/current`,{cache:"no-store"});if(r.status===204)return null;if(!r.ok)throw new Error(await r.text());return await r.json()}));setConnection(true);const latest=results.filter(Boolean).sort((a,b)=>b.sequence-a.sequence)[0];if(!latest)return;if(latest.sequence>lastSequence){lastSequence=latest.sequence;sessionStorage.setItem(`agent-seq-${primary}`,String(lastSequence));renderCard(latest,true);await loadAll()}else if(firstPoll&&!currentCard)renderCard(latest,false);firstPoll=false}catch(e){setConnection(false);console.error(e)}}
+async function pollCurrent(){
+  if(pollInFlight)return;
+  pollInFlight=true;
+  try{
+    const results=await Promise.allSettled(agent.extensions.map(async ext=>{
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),5000);
+      try{
+        const r=await fetch(`/api/agent/${encodeURIComponent(ext)}/current`,{cache:"no-store",signal:controller.signal});
+        if(r.status===204)return null;
+        if(!r.ok)throw new Error(await r.text());
+        return await r.json();
+      }finally{clearTimeout(timeout)}
+    }));
+    const successful=results.filter(x=>x.status==="fulfilled");
+    if(!successful.length)throw new Error("All agent polling requests failed.");
+    consecutivePollFailures=0;
+    setConnection(true);
+    const latest=successful.map(x=>x.value).filter(Boolean).sort((a,b)=>b.sequence-a.sequence)[0];
+    if(!latest)return;
+    if(latest.sequence>lastSequence){lastSequence=latest.sequence;sessionStorage.setItem(`agent-seq-${primary}`,String(lastSequence));renderCard(latest,true);await loadAll()}
+    else if(firstPoll&&!currentCard)renderCard(latest,false);
+    firstPoll=false;
+  }catch(e){
+    consecutivePollFailures++;
+    if(consecutivePollFailures>=3)setConnection(false);
+    console.error(e);
+  }finally{pollInFlight=false}
+}
 
 async function loadStats(){try{const r=await fetch(`/api/agent/stats?extensions=${encodeURIComponent(extensionCsv)}`,{cache:"no-store"});if(!r.ok)throw new Error(await r.text());const s=await r.json();setText("statCalls",fa(s.callsToday));setText("statOutcomes",fa(s.outcomesToday));setText("statQuotes",fa(s.quotesToday));setText("statOrders",fa(s.ordersToday));setText("statPending",fa(s.pendingFollowUps))}catch(e){console.error(e)}}
 async function loadHistory(){try{const r=await fetch(`/api/agent/history?extensions=${encodeURIComponent(extensionCsv)}&take=20`,{cache:"no-store"});if(!r.ok)throw new Error(await r.text());const rows=await r.json();$("historyRows").innerHTML=rows.length?rows.map(x=>`<div class="timeline-row" data-history='${encodeURIComponent(JSON.stringify(x))}'><div class="avatar">${esc((x.customerName||x.companyName||"؟").slice(0,1))}</div><div class="row-main"><b>${esc(x.customerName||x.companyName||"مشتری جدید")}</b><span>${esc(x.callerNumber)}</span></div><div class="row-meta hide-mobile">${esc(x.lastProduct||"بدون خرید")}</div><div class="row-meta hide-mobile">${dateTime(x.eventTimeUtc)}</div><span class="mini-rank">${esc(x.customerRank)}</span></div>`).join(""):`<div class="empty-list">هنوز تماسی ثبت نشده است.</div>`;document.querySelectorAll("[data-history]").forEach(el=>el.onclick=()=>openHistory(JSON.parse(decodeURIComponent(el.dataset.history))))}catch(e){$("historyRows").innerHTML=`<div class="empty-list">خطا در دریافت تاریخچه</div>`;console.error(e)}}
@@ -68,4 +98,4 @@ $("copyPhone").onclick=async()=>{if(!currentCard)return;await navigator.clipboar
 $("rankButton").onclick=()=>currentCard&&openDrawer("منطق رتبه مشتری",detailList([["رتبه",currentCard.customerRank],["دلیل",currentCard.customerRankReason],["توضیح","رتبه بر اساس فروش و تعداد فاکتورهای واردشده از حسابداری محاسبه می‌شود؛ این امتیاز حدس هوش مصنوعی نیست."]]));
 document.addEventListener("keydown",e=>{const typing=["INPUT","TEXTAREA"].includes(document.activeElement.tagName);if(e.key==="Escape"){$("popup").classList.add("hidden");closeDrawer();return}if(e.key==="/"&&!typing){e.preventDefault();$("note").focus();return}if(typing&&e.ctrlKey&&e.key==="Enter"){saveOutcome();return}if(typing)return;const map={"1":"FOLLOW_UP","2":"QUOTED","3":"ORDER","4":"NO_NEED"};if(map[e.key]){e.preventDefault();selectOutcome(map[e.key]);saveOutcome()}});
 if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
-pollCurrent();loadAll();setInterval(pollCurrent,1500);setInterval(loadStats,15000);setInterval(()=>Promise.all([loadHistory(),loadOutcomes()]),30000);
+pollCurrent();loadAll();setInterval(pollCurrent,3000);setInterval(loadStats,15000);setInterval(()=>Promise.all([loadHistory(),loadOutcomes()]),30000);

@@ -3,15 +3,17 @@ using DigiAhan.CDR.Receiver.Models;
 using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.1";
-const string BuildDate = "2026-08-08";
+const string AppVersion = "4.3.8";
+const string BuildDate = "2026-08-09";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddJsonFile("appsettings.RecordingIngestion.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
     optional: true,
@@ -59,7 +61,19 @@ builder.Services.AddSingleton<SystemHealthService>();
 builder.Services.AddSingleton<DatabaseMaintenanceService>();
 builder.Services.AddSingleton<IntegrationSchedulerService>();
 builder.Services.AddSingleton<InvoiceNotificationRepository>();
+builder.Services.Configure<AiPipelineOptions>(builder.Configuration.GetSection("AiPipeline"));
+builder.Services.AddSingleton<AiPipelineRepository>();
+builder.Services.Configure<RecordingIngestionOptions>(builder.Configuration.GetSection("RecordingIngestion"));
+builder.Services.AddSingleton<RecordingAssetRepository>();
+builder.Services.AddSingleton<IssabelRecordingPathResolver>();
+builder.Services.AddSingleton<IssabelSftpRecordingClient>();
+builder.Services.AddSingleton<RecordingAudioValidator>();
+builder.Services.AddSingleton<FasterWhisperTranscriber>();
+builder.Services.AddSingleton<AiTranscriptAnalyzer>();
+builder.Services.AddSingleton<AiAnalysisRepository>();
 builder.Services.AddHostedService<IntegrationSchedulerWorker>();
+builder.Services.AddHostedService<AiCallDiscoveryWorker>();
+builder.Services.AddHostedService<DailyRecordingIngestionWorker>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -137,7 +151,9 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
+app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
+app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
         ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
@@ -522,7 +538,7 @@ app.MapGet("/api/invoice-notifications", async (
     InvoiceNotificationRepository repository,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
     return Results.Ok(await repository.ListAsync(status, take ?? 200, ct));
 });
 
@@ -591,6 +607,46 @@ app.MapPost("/api/invoice-notifications/{id:long}/manual-sent", async (
     catch (SqlException ex) when (ex.Number == 51000)
     {
         return Results.BadRequest(new { error = "ابتدا باید متن و لینک پیامک آماده شود." });
+    }
+});
+
+// Restricted operator workflow for trusted private-LAN clients. Management
+// actions remain protected by the management token.
+app.MapPost("/api/sms-operator/prepare", async (
+    PrepareInvoiceNotificationsRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(await repository.PrepareAsync(request.NotificationIds, request.Actor, ct));
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/sms-operator/{id:long}/manual-sent", async (
+    long id,
+    MarkManualSentRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        await repository.MarkManualSentAsync(id, request.Actor, request.Note, ct);
+        return Results.Ok(new { status = "MANUALLY_SENT" });
+    }
+    catch (SqlException ex) when (ex.Number == 51000)
+    {
+        return Results.BadRequest(new { error = "این حواله در وضعیت قابل ارسال نیست." });
     }
 });
 
@@ -672,6 +728,124 @@ app.MapPost("/api/mappings/import", async (
     await using var input = file.OpenReadStream();
     return Results.Ok(await service.ImportExcelAsync(input, Path.GetFileName(file.FileName), ct));
 }).DisableAntiforgery();
+
+app.MapGet("/api/ai/status", async (
+    HttpContext context,
+    IConfiguration configuration,
+    AiAnalysisRepository repository,
+    IOptionsMonitor<RecordingIngestionOptions> recordingOptions,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    var ingestion = recordingOptions.CurrentValue;
+    return Results.Ok(new
+    {
+        installed = await repository.IsInstalledAsync(ct),
+        analyzerVersion = AiTranscriptAnalyzer.Version,
+        recordingIngestion = new
+        {
+            enabled = ingestion.Enabled,
+            scope = "TODAY_ONLY",
+            ingestion.SourceName,
+            ingestion.RemoteRoot,
+            credentialsConfigured =
+                !string.IsNullOrWhiteSpace(ingestion.Username) &&
+                File.Exists(ingestion.PrivateKeyPath) &&
+                File.Exists(ingestion.KnownHostsPath)
+        }
+    });
+});
+
+app.MapPost("/api/ai/runs/{runId:long}/analyze", async (
+    long runId,
+    AiAnalyzeRunRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    AiTranscriptAnalyzer analyzer,
+    AiAnalysisRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(request.TranscriptText) &&
+        !string.Equals(request.AudioClassHint, "NON_SPEECH_OR_UNSUPPORTED", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "TranscriptText is required unless the audio is explicitly non-speech." });
+    if (request.TranscriptText?.Length > 2_000_000)
+        return Results.BadRequest(new { error = "TranscriptText exceeds the 2,000,000 character limit." });
+    if (!string.IsNullOrWhiteSpace(request.SegmentsJson))
+    {
+        try { using var _ = JsonDocument.Parse(request.SegmentsJson); }
+        catch (JsonException) { return Results.BadRequest(new { error = "SegmentsJson is not valid JSON." }); }
+    }
+    try
+    {
+        var result = analyzer.Analyze(request);
+        await repository.SaveAnalysisAsync(runId, request, result, ct);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/ai/calls", async (
+    string? search,
+    string? audioClass,
+    string? reviewStatus,
+    int? page,
+    int? pageSize,
+    HttpContext context,
+    IConfiguration configuration,
+    AiAnalysisRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(await repository.ListCallsAsync(search, audioClass, reviewStatus, page ?? 1, pageSize ?? 50, ct));
+});
+
+app.MapGet("/api/ai/calls/{logicalCallId:long}", async (
+    long logicalCallId,
+    HttpContext context,
+    IConfiguration configuration,
+    AiAnalysisRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    var result = await repository.GetCallAsync(logicalCallId, ct);
+    return result is null ? Results.NotFound(new { error = "AI call was not found." }) : Results.Ok(result);
+});
+
+app.MapGet("/api/ai/reviews", async (
+    string? status,
+    int? take,
+    HttpContext context,
+    IConfiguration configuration,
+    AiAnalysisRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(await repository.ListReviewsAsync(status, take ?? 200, ct));
+});
+
+app.MapPost("/api/ai/reviews/{reviewItemId:long}/resolve", async (
+    long reviewItemId,
+    AiReviewResolutionRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    AiAnalysisRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        var updated = await repository.ResolveReviewAsync(reviewItemId, request, ct);
+        return updated ? Results.Ok(new { updated = true }) : Results.NotFound(new { error = "Review item was not found." });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
 
 app.MapPost("/api/cdr", async (
     HttpRequest httpRequest,
@@ -755,6 +929,19 @@ static bool CanWriteInternalData(HttpContext context, IConfiguration configurati
     return !string.IsNullOrWhiteSpace(expected)
         && !string.IsNullOrWhiteSpace(supplied)
         && TokenComparer.FixedTimeEquals(expected, supplied);
+}
+
+static bool CanReadInternalData(HttpContext context, IConfiguration configuration)
+{
+    if (CanWriteInternalData(context, configuration)) return true;
+    var remote = context.Connection.RemoteIpAddress;
+    if (remote is null) return false;
+    if (remote.IsIPv4MappedToIPv6) remote = remote.MapToIPv4();
+    var bytes = remote.GetAddressBytes();
+    if (bytes.Length != 4) return false;
+    return bytes[0] == 10
+           || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+           || (bytes[0] == 192 && bytes[1] == 168);
 }
 
 

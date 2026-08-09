@@ -8,8 +8,8 @@ using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.1";
-const string BuildDate = "2026-08-08";
+const string AppVersion = "4.3.8";
+const string BuildDate = "2026-08-09";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
@@ -153,6 +153,7 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
 app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
+app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
         ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
@@ -537,7 +538,7 @@ app.MapGet("/api/invoice-notifications", async (
     InvoiceNotificationRepository repository,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
     return Results.Ok(await repository.ListAsync(status, take ?? 200, ct));
 });
 
@@ -606,6 +607,46 @@ app.MapPost("/api/invoice-notifications/{id:long}/manual-sent", async (
     catch (SqlException ex) when (ex.Number == 51000)
     {
         return Results.BadRequest(new { error = "ابتدا باید متن و لینک پیامک آماده شود." });
+    }
+});
+
+// Restricted operator workflow for trusted private-LAN clients. Management
+// actions remain protected by the management token.
+app.MapPost("/api/sms-operator/prepare", async (
+    PrepareInvoiceNotificationsRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(await repository.PrepareAsync(request.NotificationIds, request.Actor, ct));
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/sms-operator/{id:long}/manual-sent", async (
+    long id,
+    MarkManualSentRequest request,
+    HttpContext context,
+    IConfiguration configuration,
+    InvoiceNotificationRepository repository,
+    CancellationToken ct) =>
+{
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    try
+    {
+        await repository.MarkManualSentAsync(id, request.Actor, request.Note, ct);
+        return Results.Ok(new { status = "MANUALLY_SENT" });
+    }
+    catch (SqlException ex) when (ex.Number == 51000)
+    {
+        return Results.BadRequest(new { error = "این حواله در وضعیت قابل ارسال نیست." });
     }
 });
 
@@ -888,6 +929,19 @@ static bool CanWriteInternalData(HttpContext context, IConfiguration configurati
     return !string.IsNullOrWhiteSpace(expected)
         && !string.IsNullOrWhiteSpace(supplied)
         && TokenComparer.FixedTimeEquals(expected, supplied);
+}
+
+static bool CanReadInternalData(HttpContext context, IConfiguration configuration)
+{
+    if (CanWriteInternalData(context, configuration)) return true;
+    var remote = context.Connection.RemoteIpAddress;
+    if (remote is null) return false;
+    if (remote.IsIPv4MappedToIPv6) remote = remote.MapToIPv4();
+    var bytes = remote.GetAddressBytes();
+    if (bytes.Length != 4) return false;
+    return bytes[0] == 10
+           || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+           || (bytes[0] == 192 && bytes[1] == 168);
 }
 
 

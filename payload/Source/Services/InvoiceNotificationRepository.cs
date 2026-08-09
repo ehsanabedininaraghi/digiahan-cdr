@@ -94,13 +94,19 @@ public sealed class InvoiceNotificationRepository
                   AND ii.FactorCode=i.FactorCode
             ) itemData
             WHERE NULLIF(LTRIM(RTRIM(i.FactorDescription)),N'') IS NOT NULL
+              AND i.FactorDate IN (@today,@yesterday)
+              /*
               AND i.FactorDescription LIKE N'%حواله%';
+              */;
             """;
 
         var candidates = new List<DiscoveryCandidate>();
+        var (today, yesterday) = RecentPersianDates();
         await using (var command = new SqlCommand(sql, connection) { CommandTimeout = 120 })
-        await using (var reader = await command.ExecuteReaderAsync(ct))
         {
+            command.Parameters.Add("@today", SqlDbType.NVarChar, 10).Value = today;
+            command.Parameters.Add("@yesterday", SqlDbType.NVarChar, 10).Value = yesterday;
+            await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
                 var voucher = DeliveryVoucherParser.Parse(GetString(reader, "FactorDescription"));
@@ -161,20 +167,29 @@ public sealed class InvoiceNotificationRepository
         await using var connection = await OpenAsync(ct);
         const string sql = """
             SELECT TOP(@take)
-                Id,IdentityId,InvoiceNumber,FactorDate,CustomerNameSnapshot,
-                ProductSummarySnapshot,DeliveryVoucherNumber,PrimaryPhoneSnapshot,
-                SmsStatus,CreatedAtUtc,PreparedAtUtc,SmsSentAt
-            FROM dbo.InvoiceNotifications
-            WHERE @status=N'ALL' OR SmsStatus=@status
-            ORDER BY CASE SmsStatus
+                n.Id,n.IdentityId,n.InvoiceNumber,n.FactorDate,n.CustomerNameSnapshot,
+                n.ProductSummarySnapshot,n.DeliveryVoucherNumber,n.PrimaryPhoneSnapshot,
+                n.SmsStatus,n.CreatedAtUtc,n.PreparedAtUtc,n.SmsSentAt,n.PreparedBy,
+                (SELECT TOP(1) a.Actor FROM dbo.InvoiceNotificationAttempts a
+                 WHERE a.NotificationId=n.Id AND a.Action=N'MANUAL_SEND'
+                 ORDER BY a.AttemptId DESC) AS SentBy
+            FROM dbo.InvoiceNotifications n
+            WHERE ((@status=N'ALL' AND n.SmsStatus<>N'MANUALLY_SENT') OR n.SmsStatus=@status)
+              AND FactorDate IN (@today,@yesterday)
+              AND (@status<>N'MANUALLY_SENT' OR n.SmsSentAt>=@todayStartUtc)
+            ORDER BY CASE n.SmsStatus
                         WHEN N'READY' THEN 0 WHEN N'NEEDS_PHONE' THEN 1
                         WHEN N'NEEDS_IDENTITY' THEN 2 WHEN N'PREPARED' THEN 3 ELSE 4 END,
                      CreatedAtUtc DESC;
             """;
+        var (today, yesterday) = RecentPersianDates();
         await using (var command = new SqlCommand(sql, connection))
         {
             command.Parameters.Add("@take", SqlDbType.Int).Value = take;
             command.Parameters.Add("@status", SqlDbType.NVarChar, 30).Value = status;
+            command.Parameters.Add("@today", SqlDbType.NVarChar, 10).Value = today;
+            command.Parameters.Add("@yesterday", SqlDbType.NVarChar, 10).Value = yesterday;
+            command.Parameters.Add("@todayStartUtc", SqlDbType.DateTime2).Value = DateTime.Today.ToUniversalTime();
             await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
@@ -184,7 +199,8 @@ public sealed class InvoiceNotificationRepository
                     GetString(reader, "CustomerNameSnapshot"), GetString(reader, "ProductSummarySnapshot"),
                     GetString(reader, "DeliveryVoucherNumber")!, GetString(reader, "PrimaryPhoneSnapshot"),
                     GetString(reader, "SmsStatus")!, reader.GetDateTime(reader.GetOrdinal("CreatedAtUtc")),
-                    GetDateTime(reader, "PreparedAtUtc"), GetDateTime(reader, "SmsSentAt")));
+                    GetDateTime(reader, "PreparedAtUtc"), GetDateTime(reader, "SmsSentAt"),
+                    GetString(reader, "PreparedBy"), GetString(reader, "SentBy")));
             }
         }
 
@@ -193,7 +209,8 @@ public sealed class InvoiceNotificationRepository
             row.Id, row.InvoiceNumber, row.FactorDate, row.CustomerName, row.ProductSummary,
             row.DeliveryVoucherNumber, row.PrimaryPhone,
             phones.TryGetValue(row.Id, out var values) ? values : Array.Empty<string>(),
-            row.Status, row.CreatedAtUtc, row.PreparedAtUtc, row.SmsSentAt)).ToArray();
+            row.Status, row.CreatedAtUtc, row.PreparedAtUtc, row.SmsSentAt,
+            row.PreparedBy, row.SentBy)).ToArray();
     }
 
     public async Task<string> SetPrimaryMobileAsync(long notificationId, string? rawPhone, string? actor, CancellationToken ct)
@@ -291,13 +308,6 @@ public sealed class InvoiceNotificationRepository
         if (ids.Length == 0) throw new ArgumentException("حداقل یک فاکتور باید انتخاب شود.");
 
         await EnsureSchemaAsync(ct);
-        var expiresDays = Math.Clamp(_configuration.GetValue("InvoiceNotifications:TokenExpiryDays", 7), 1, 30);
-        var baseUrl = (_configuration["InvoiceNotifications:PublicOrderBaseUrl"]
-                       ?? "https://www.digiahan.com/order").Trim().TrimEnd('/');
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var parsedBase)
-            || parsedBase.Scheme is not ("http" or "https"))
-            throw new InvalidOperationException("InvoiceNotifications:PublicOrderBaseUrl معتبر نیست.");
-
         var prepared = new List<PreparedInvoiceNotification>();
         await using var connection = await OpenAsync(ct);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
@@ -311,33 +321,27 @@ public sealed class InvoiceNotificationRepository
                 if (string.IsNullOrWhiteSpace(row.PrimaryPhone))
                     throw new InvalidOperationException($"برای اعلان {id} شماره موبایل معتبر و بدون تعارض وجود ندارد.");
 
-                var token = PublicTokenService.Create();
-                var tokenHash = PublicTokenService.Hash(token);
-                var expiresAt = DateTime.UtcNow.AddDays(expiresDays);
-                var publicUrl = $"{baseUrl}/{token}";
-                var template = BuildMessageTemplate(row.ProductSummary, row.DeliveryVoucherNumber);
-                var message = template.Replace("{LINK}", publicUrl, StringComparison.Ordinal);
+                var message = BuildSmsWithoutLink(
+                    row.CustomerName, row.ProductSummary, row.DeliveryVoucherNumber);
 
                 const string updateSql = """
                     UPDATE dbo.InvoiceNotifications
-                    SET PrimaryPhoneSnapshot=@phone,SmsStatus=N'PREPARED',PublicTokenHash=@hash,
-                        TokenExpiresAtUtc=@expires,MessageBodySnapshot=@message,
+                    SET PrimaryPhoneSnapshot=@phone,SmsStatus=N'PREPARED',PublicTokenHash=NULL,
+                        TokenExpiresAtUtc=NULL,MessageBodySnapshot=@message,
                         PreparedAtUtc=SYSUTCDATETIME(),PreparedBy=@actor,LastError=NULL,
                         UpdatedAtUtc=SYSUTCDATETIME()
                     WHERE Id=@id;
                     INSERT dbo.InvoiceNotificationAttempts
                         (NotificationId,Action,Status,PhoneSnapshot,Actor,Detail)
-                    VALUES(@id,N'PREPARE',N'SUCCESS',@phone,@actor,N'Secure public link generated.');
+                    VALUES(@id,N'PREPARE',N'SUCCESS',@phone,@actor,N'SMS text prepared without public link.');
                     """;
                 await using var update = new SqlCommand(updateSql, connection, transaction);
                 update.Parameters.Add("@id", SqlDbType.BigInt).Value = id;
                 update.Parameters.Add("@phone", SqlDbType.NVarChar, 32).Value = row.PrimaryPhone;
-                update.Parameters.Add("@hash", SqlDbType.Binary, 32).Value = tokenHash;
-                update.Parameters.Add("@expires", SqlDbType.DateTime2).Value = expiresAt;
-                update.Parameters.Add("@message", SqlDbType.NVarChar, 2000).Value = template;
+                update.Parameters.Add("@message", SqlDbType.NVarChar, 2000).Value = message;
                 update.Parameters.Add("@actor", SqlDbType.NVarChar, 100).Value = NormalizeActor(actor);
                 await update.ExecuteNonQueryAsync(ct);
-                prepared.Add(new PreparedInvoiceNotification(id, row.PrimaryPhone, publicUrl, message, expiresAt));
+                prepared.Add(new PreparedInvoiceNotification(id, row.PrimaryPhone, message));
             }
             await transaction.CommitAsync(ct);
             return prepared;
@@ -357,8 +361,8 @@ public sealed class InvoiceNotificationRepository
             UPDATE dbo.InvoiceNotifications
             SET SmsStatus=N'MANUALLY_SENT',SmsSentAt=SYSUTCDATETIME(),SmsProviderId=N'MANUAL',
                 UpdatedAtUtc=SYSUTCDATETIME()
-            WHERE Id=@id AND SmsStatus=N'PREPARED';
-            IF @@ROWCOUNT=0 THROW 51000,N'Notification must be PREPARED before marking it sent.',1;
+            WHERE Id=@id AND SmsStatus IN (N'READY',N'PREPARED');
+            IF @@ROWCOUNT=0 THROW 51000,N'Only READY or PREPARED notifications can be marked sent.',1;
             INSERT dbo.InvoiceNotificationAttempts
                 (NotificationId,Action,Status,PhoneSnapshot,Actor,ProviderId,Detail)
             SELECT Id,N'MANUAL_SEND',N'SUCCESS',PrimaryPhoneSnapshot,@actor,N'MANUAL',@note
@@ -461,7 +465,7 @@ public sealed class InvoiceNotificationRepository
         command.Parameters.Add("@identity", SqlDbType.BigInt).Value = Db(row.IdentityId);
         command.Parameters.Add("@invoice", SqlDbType.NVarChar, 50).Value = Db(row.InvoiceNumber);
         command.Parameters.Add("@date", SqlDbType.NVarChar, 10).Value = Db(row.FactorDate);
-        command.Parameters.Add("@voucher", SqlDbType.NVarChar, 100).Value = row.DeliveryVoucherNumber;
+        command.Parameters.Add("@voucher", SqlDbType.NVarChar, 1000).Value = row.DeliveryVoucherNumber;
         command.Parameters.Add("@customer", SqlDbType.NVarChar, 400).Value = Db(row.CustomerName);
         command.Parameters.Add("@product", SqlDbType.NVarChar, 800).Value = Db(row.ProductSummary);
         command.Parameters.Add("@phone", SqlDbType.NVarChar, 32).Value = Db(row.PrimaryPhone);
@@ -510,7 +514,7 @@ public sealed class InvoiceNotificationRepository
         SqlConnection connection, SqlTransaction transaction, long id, CancellationToken ct)
     {
         const string sql = """
-            SELECT n.IdentityId,n.DeliveryVoucherNumber,n.ProductSummarySnapshot,
+            SELECT n.IdentityId,n.CustomerNameSnapshot,n.DeliveryVoucherNumber,n.ProductSummarySnapshot,
                    phone.NormalizedPhone
             FROM dbo.InvoiceNotifications n WITH (UPDLOCK,ROWLOCK)
             OUTER APPLY
@@ -537,14 +541,20 @@ public sealed class InvoiceNotificationRepository
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
         return new PrepareRow(
-            GetLongNullable(reader, "IdentityId"), GetString(reader, "DeliveryVoucherNumber")!,
+            GetLongNullable(reader, "IdentityId"), GetString(reader, "CustomerNameSnapshot"),
+            GetString(reader, "DeliveryVoucherNumber")!,
             GetString(reader, "ProductSummarySnapshot"), GetString(reader, "NormalizedPhone"));
     }
 
-    private static string BuildMessageTemplate(string? product, string voucher)
+    private static string BuildSmsWithoutLink(string? customerName, string? product, string voucher)
     {
-        var productLine = string.IsNullOrWhiteSpace(product) ? string.Empty : $"محصول: {product.Trim()}\n";
-        return $"مشتری گرامی،\nاطلاعات خرید شما آماده است.\n{productLine}شماره حواله: {voucher}\nمشاهده اطلاعات خرید: {{LINK}}\nدیجی‌آهن";
+        var recipient = string.IsNullOrWhiteSpace(customerName)
+            ? "مشتری گرامی"
+            : $"{customerName.Trim()} عزیز";
+        var productLine = string.IsNullOrWhiteSpace(product)
+            ? string.Empty
+            : $"محصول: {product.Trim()}\n";
+        return $"{recipient}\nحواله خرید شما ثبت شد.\n{productLine}شرح حواله: {voucher.Trim()}\nدیجی‌آهن";
     }
 
     private async Task<SqlConnection> OpenAsync(CancellationToken ct)
@@ -557,6 +567,14 @@ public sealed class InvoiceNotificationRepository
     private static object Db(object? value) => value ?? DBNull.Value;
     private static string NormalizeActor(string? actor)
         => string.IsNullOrWhiteSpace(actor) ? "MANAGER" : actor.Trim()[..Math.Min(actor.Trim().Length, 100)];
+    private static (string Today, string Yesterday) RecentPersianDates()
+    {
+        var calendar = new PersianCalendar();
+        static string Format(PersianCalendar calendar, DateTime date)
+            => $"{calendar.GetYear(date):0000}/{calendar.GetMonth(date):00}/{calendar.GetDayOfMonth(date):00}";
+        var now = DateTime.Now;
+        return (Format(calendar, now), Format(calendar, now.AddDays(-1)));
+    }
     private static int GetInt(SqlDataReader reader, string name)
         => reader.IsDBNull(reader.GetOrdinal(name)) ? 0 : Convert.ToInt32(reader[name]);
     private static long GetLong(SqlDataReader reader, string name)
@@ -579,8 +597,10 @@ public sealed class InvoiceNotificationRepository
         long Id, long? IdentityId, string? InvoiceNumber, string? FactorDate,
         string? CustomerName, string? ProductSummary, string DeliveryVoucherNumber,
         string? PrimaryPhone, string Status, DateTime CreatedAtUtc,
-        DateTime? PreparedAtUtc, DateTime? SmsSentAt);
+        DateTime? PreparedAtUtc, DateTime? SmsSentAt,
+        string? PreparedBy, string? SentBy);
 
     private sealed record PrepareRow(
-        long? IdentityId, string DeliveryVoucherNumber, string? ProductSummary, string? PrimaryPhone);
+        long? IdentityId, string? CustomerName, string DeliveryVoucherNumber,
+        string? ProductSummary, string? PrimaryPhone);
 }

@@ -4,9 +4,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <Version>4.3.1</Version>
-    <AssemblyVersion>4.3.1.0</AssemblyVersion>
-    <FileVersion>4.3.1.0</FileVersion>
+    <Version>4.3.8</Version>
+    <AssemblyVersion>4.3.8.0</AssemblyVersion>
+    <FileVersion>4.3.8.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

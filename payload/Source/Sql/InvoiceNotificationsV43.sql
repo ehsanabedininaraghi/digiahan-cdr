@@ -83,6 +83,15 @@ BEGIN
         WHERE PublicTokenHash IS NOT NULL;
 END;
 
+-- v4.3.2 keeps the entire accounting description as the voucher reference.
+-- The earlier 100-character column can truncate legitimate descriptions.
+IF OBJECT_ID(N'dbo.InvoiceNotifications',N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.InvoiceNotifications',N'DeliveryVoucherNumber') < 2000
+BEGIN
+    ALTER TABLE dbo.InvoiceNotifications
+        ALTER COLUMN DeliveryVoucherNumber nvarchar(1000) NOT NULL;
+END;
+
 IF OBJECT_ID(N'dbo.InvoiceNotificationAttempts',N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.InvoiceNotificationAttempts

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ارسال اطلاعات خرید مشتری</title>
+  <link rel="stylesheet" href="style.css?v=438">
+</head>
+<body>
+<header>
+  <div><h1>ارسال اطلاعات خرید مشتری <span>v4.3.8</span></h1><p>داشبورد اپراتور ارسال پیامک حواله‌های امروز و دیروز</p></div>
+  <a href="/dashboard">بازگشت به داشبورد</a>
+</header>
+<main>
+  <section class="toolbar">
+    <label>نام ارسال‌کننده<input id="actor" placeholder="نام و نام خانوادگی اپراتور"></label>
+    <button id="refresh" class="secondary">به‌روزرسانی</button>
+    <p id="summary">در حال دریافت...</p>
+  </section>
+  <section class="notice">نام ارسال‌کننده در سوابق ثبت می‌شود. ابتدا متن را آماده و کپی کنید؛ پس از ارسال واقعی پیامک، «ارسال شد» را بزنید.</section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>پیامک‌های آماده ارسال</h2><p>تمام شماره‌های موبایل متصل به هویت مشتری نمایش داده می‌شود.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>فاکتور</th><th>تاریخ</th><th>مشتری</th><th>محصول</th><th>شرح / حواله</th><th>شماره‌های موبایل</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+      <tbody id="readyRows"></tbody>
+    </table></div>
+  </section>
+
+  <section id="preparedPanel" class="panel hidden">
+    <div class="panel-head"><div><h2>متن آماده ارسال</h2><p>این متن عیناً کپی می‌شود و لینک ندارد.</p></div></div>
+    <div id="preparedRows" class="prepared-grid"></div>
+  </section>
+
+  <section class="panel sent-panel">
+    <div class="panel-head"><div><h2>ارسال‌شده‌های امروز</h2><p>نام ارسال‌کننده و زمان ثبت برای پیگیری نگهداری می‌شود.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>زمان ارسال</th><th>فاکتور</th><th>مشتری</th><th>شرح / حواله</th><th>شماره</th><th>ارسال‌کننده</th></tr></thead>
+      <tbody id="sentRows"></tbody>
+    </table></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="app.js?v=438"></script>
+</body>
+</html>

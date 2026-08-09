@@ -12,7 +12,9 @@ public sealed record InvoiceNotificationListItem(
     string Status,
     DateTime CreatedAtUtc,
     DateTime? PreparedAtUtc,
-    DateTime? SmsSentAt);
+    DateTime? SmsSentAt,
+    string? PreparedBy,
+    string? SentBy);
 
 public sealed record InvoiceNotificationDiscoveryResult(
     int Scanned,
@@ -26,9 +28,7 @@ public sealed record PrepareInvoiceNotificationsRequest(IReadOnlyList<long>? Not
 public sealed record PreparedInvoiceNotification(
     long NotificationId,
     string Phone,
-    string PublicUrl,
-    string SmsText,
-    DateTime ExpiresAtUtc);
+    string SmsText);
 
 public sealed record SetPrimaryMobileRequest(string? Phone, string? Actor);
 
