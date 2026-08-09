@@ -27,6 +27,7 @@ Thumbs.db
 Source/appsettings.Accounting.local.json
 
 Source/appsettings.Voip.local.json
+Source/appsettings.RecordingIngestion.local.json
 
 
 
@@ -38,3 +39,5 @@ Source/appsettings.json
 Logs/
 _backups/
 *.log
+**/__pycache__/
+*.pyc

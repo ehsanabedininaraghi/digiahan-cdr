@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>هوش مکالمات دیجی‌آهن</title>
+  <link rel="stylesheet" href="style.css?v=431">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <p class="eyebrow">DigiAhan Conversation Intelligence</p>
+    <h1>هوش مکالمات <span>نسخه آزمایشی</span></h1>
+    <p>متن تماس، داده‌های استخراج‌شده و موارد نیازمند بررسی انسانی</p>
+  </div>
+  <a class="back" href="/dashboard">بازگشت به داشبورد</a>
+</header>
+
+<main>
+  <section id="notice" class="notice hidden" role="status"></section>
+
+  <section class="panel access-panel">
+    <div>
+      <h2>دسترسی و فیلترها</h2>
+      <p>در اجرای محلی توکن لازم نیست؛ برای دسترسی شبکه، توکن API را وارد کنید.</p>
+    </div>
+    <label>توکن API<input id="apiToken" type="password" autocomplete="off" placeholder="اختیاری در همین سیستم"></label>
+    <label>نام بازبین<input id="reviewer" type="text" maxlength="100" placeholder="مثلاً مدیر فروش"></label>
+    <button id="saveAccess" class="secondary">ذخیره دسترسی</button>
+  </section>
+
+  <section class="cards" aria-label="خلاصه وضعیت">
+    <article><span>تماس‌های نمایش‌داده‌شده</span><strong id="loadedCount">۰</strong><small>در صفحه جاری</small></article>
+    <article><span>مکالمه‌های کاری</span><strong id="businessCount">۰</strong><small>قابل تحلیل تجاری</small></article>
+    <article class="warning"><span>بازبینی باز</span><strong id="openReviewCount">۰</strong><small>نیازمند تصمیم انسان</small></article>
+    <article><span>ورود صدای روزانه</span><strong id="ingestionState">نامشخص</strong><small id="ingestionHint">در حال بررسی</small></article>
+  </section>
+
+  <section class="panel filter-panel">
+    <label class="search">جست‌وجو
+      <input id="search" type="search" placeholder="متن، شماره، داخلی، خلاصه یا فایل ضبط">
+    </label>
+    <label>نوع صدا
+      <select id="audioClass">
+        <option value="">همه</option>
+        <option value="BUSINESS_CONVERSATION">مکالمه کاری</option>
+        <option value="NEEDS_REVIEW">نیازمند بررسی</option>
+        <option value="NON_SPEECH_OR_UNSUPPORTED">غیرگفتاری / پشتیبانی‌نشده</option>
+        <option value="EMPTY_OR_LOW_SIGNAL">خالی / سیگنال ضعیف</option>
+      </select>
+    </label>
+    <label>وضعیت بررسی
+      <select id="callReviewStatus">
+        <option value="">همه</option>
+        <option value="OPEN">دارای بررسی باز</option>
+        <option value="CONFIRMED">تأییدشده</option>
+        <option value="CORRECTED">اصلاح‌شده</option>
+        <option value="REJECTED">ردشده</option>
+        <option value="DEFERRED">موکول‌شده</option>
+      </select>
+    </label>
+    <button id="refresh">به‌روزرسانی</button>
+  </section>
+
+  <section class="workspace">
+    <article class="panel calls-panel">
+      <div class="panel-head">
+        <div><h2>تماس‌های تحلیل‌شده</h2><p>یک تماس منطقی، مستقل از تعداد legهای CDR</p></div>
+        <span id="loadingCalls" class="muted"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>زمان</th><th>شناسه تماس</th><th>نوع</th><th>داخلی</th><th>اطمینان</th><th>داده</th><th>بررسی باز</th><th></th></tr></thead>
+          <tbody id="callRows"></tbody>
+        </table>
+      </div>
+      <div class="pager"><button id="prevPage" class="secondary">صفحه قبل</button><span id="pageLabel">صفحه ۱</span><button id="nextPage" class="secondary">صفحه بعد</button></div>
+    </article>
+
+    <aside id="detailPanel" class="panel detail-panel">
+      <div id="emptyDetail" class="empty-state"><b>جزئیات یک تماس را باز کنید</b><span>متن، شواهد زمانی و یافته‌های ساختاری اینجا نمایش داده می‌شود.</span></div>
+      <div id="detailContent" class="hidden">
+        <div class="panel-head"><div><h2 id="detailTitle">جزئیات تماس</h2><p id="detailMeta"></p></div><button id="closeDetail" class="icon-button" title="بستن">×</button></div>
+        <section class="summary-box"><span>جمع‌بندی ماشینی</span><p id="detailSummary"></p><small>خروجی ماشینی است و حکم قطعی درباره افراد نیست.</small></section>
+        <section><h3>وضعیت پردازش ضبط</h3><div id="recordingStatus" class="status-line"></div></section>
+        <section><h3>متن و زمان‌بندی</h3><div id="transcript" class="transcript"></div></section>
+        <section><h3>داده‌های استخراج‌شده</h3><div id="facts" class="facts"></div></section>
+        <section><h3>بازبینی‌های همین تماس</h3><div id="detailReviews" class="review-list"></div></section>
+      </div>
+    </aside>
+  </section>
+
+  <section class="panel review-panel">
+    <div class="panel-head">
+      <div><h2>صف بازبینی انسانی</h2><p>موارد حساس فقط پس از تصمیم انسان نهایی می‌شوند.</p></div>
+      <label>نمایش
+        <select id="queueStatus">
+          <option value="OPEN">باز</option><option value="DEFERRED">موکول‌شده</option><option value="CONFIRMED">تأییدشده</option><option value="CORRECTED">اصلاح‌شده</option><option value="REJECTED">ردشده</option><option value="ALL">همه</option>
+        </select>
+      </label>
+    </div>
+    <div id="reviewRows" class="review-list"></div>
+  </section>
+</main>
+
+<footer>دیجی‌آهن · داده خام و فایل فیزیکی در مرورگر افشا نمی‌شود · پخش صدا در این مرحله فعال نیست</footer>
+<script src="app.js?v=431" defer></script>
+</body>
+</html>

@@ -28,7 +28,7 @@ public sealed class LegacyAccountingBridgeRunner
         var repositoryRoot = Directory.GetParent(_environment.ContentRootPath)?.FullName
             ?? throw new InvalidOperationException("Repository root could not be resolved.");
         var configuredPath = _configuration["DataGathering:AccountingBridgeScript"]
-            ?? "tools/accounting-bridge-v4.3.1.ps1";
+            ?? "tools/accounting-bridge-v4.3.8.ps1";
         var scriptPath = Path.IsPathRooted(configuredPath)
             ? configuredPath
             : Path.Combine(repositoryRoot, configuredPath);
