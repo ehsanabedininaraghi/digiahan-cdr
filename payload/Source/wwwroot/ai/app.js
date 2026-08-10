@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
-const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false, demoMode: false, sampleDetails: {} };
+const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false, demoMode: false, sampleDetails: {}, hasNext: false };
 const labels = {
   BUSINESS_CONVERSATION: "مکالمه کاری", QUEUE_ONLY: "فقط صدای صف", NEEDS_REVIEW: "نیازمند بررسی",
   NON_SPEECH_OR_UNSUPPORTED: "غیرگفتاری / پشتیبانی‌نشده", EMPTY_OR_LOW_SIGNAL: "خالی / سیگنال ضعیف",
@@ -79,6 +79,7 @@ async function refreshAll() {
     state.demoMode = false;
     state.sampleDetails = {};
     state.calls = Array.isArray(calls) ? calls : [];
+    state.hasNext = state.calls.length >= state.pageSize;
     state.reviews = Array.isArray(reviews) ? reviews : [];
     renderCalls();
     renderReviews();
@@ -94,7 +95,8 @@ async function refreshAll() {
 }
 
 async function loadSampleData(cause) {
-  const response = await fetch(`/ai/sample-data.json?v=4381`, { cache: "no-store" });
+  let response = await fetch(`/ai/batch-data.json?v=4382`, { cache: "no-store" });
+  if (!response.ok) response = await fetch(`/ai/sample-data.json?v=4382`, { cache: "no-store" });
   if (!response.ok) throw cause;
   const sample = await response.json();
   const search = $("search").value.trim().toLocaleLowerCase("fa");
@@ -111,15 +113,26 @@ async function loadSampleData(cause) {
     facts: call.sampleFacts || [],
     reviewItems: allReviews.filter(item => item.logicalCallId === call.logicalCallId)
   }]));
-  state.calls = (sample.calls || []).filter(call =>
+  const filteredCalls = (sample.calls || []).filter(call =>
     (!search || JSON.stringify(call).toLocaleLowerCase("fa").includes(search)) &&
     (!audioClass || call.audioClass === audioClass) &&
     (!reviewStatus || (call.reviewStatuses || []).includes(reviewStatus)));
+  const pageStart = (state.page - 1) * state.pageSize;
+  state.calls = filteredCalls.slice(pageStart, pageStart + state.pageSize);
+  state.hasNext = pageStart + state.pageSize < filteredCalls.length;
   state.reviews = allReviews.filter(item => queueStatus === "ALL" || item.reviewStatus === queueStatus);
+  const metrics = sample.metrics || {};
+  const analysisCount = Number(metrics.analysisCount || (sample.calls || []).length);
+  const audioFileCount = Number(metrics.audioFileCount || 5);
+  const durationMinutes = Number(metrics.totalDurationSeconds || 414) / 60;
+  const totalMegabytes = Number(metrics.totalBytes || 6627000) / 1048576;
+  $("sampleDataCount").textContent = `${fa(analysisCount)} تحلیل`;
+  $("sampleDataHint").textContent = `${fa(audioFileCount)} فایل · ${fa(durationMinutes.toFixed(1))} دقیقه · ${fa(totalMegabytes.toFixed(1))} MB`;
   renderCalls();
   renderReviews();
   renderStatus(sample.status || {}, allReviews.filter(item => item.reviewStatus === "OPEN"));
-  showNotice(`حالت نمونه امن فعال است: ۶ تحلیل آزمایشی نمایش داده می‌شود. علت اتصال عملیاتی: ${cause.message}`);
+  const transcribedCount = Number(metrics.transcribedNewCount || 0);
+  showNotice(`حالت batch امن فعال است: ${fa(analysisCount)} تحلیل، ${fa(transcribedCount)} متن اولیه و ${fa(audioFileCount)} فایل صوتی ثبت شده است. علت اتصال عملیاتی: ${cause.message}`);
   if (state.detailId && state.sampleDetails[state.detailId]) renderDetail(state.sampleDetails[state.detailId]);
 }
 
@@ -151,7 +164,7 @@ function renderCalls() {
   }
   $("pageLabel").textContent = `صفحه ${fa(state.page)}`;
   $("prevPage").disabled = state.page <= 1;
-  $("nextPage").disabled = state.calls.length < state.pageSize;
+  $("nextPage").disabled = !state.hasNext;
   rows.querySelectorAll("tr[data-call-id],button[data-call-id]").forEach(node => node.addEventListener("click", event => {
     event.stopPropagation();
     loadDetail(Number(node.dataset.callId));
