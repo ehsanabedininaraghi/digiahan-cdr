@@ -736,7 +736,7 @@ app.MapGet("/api/ai/status", async (
     IOptionsMonitor<RecordingIngestionOptions> recordingOptions,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
     var ingestion = recordingOptions.CurrentValue;
     return Results.Ok(new
     {
@@ -799,7 +799,8 @@ app.MapGet("/api/ai/calls", async (
     AiAnalysisRepository repository,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    if (!await repository.IsInstalledAsync(ct)) return Results.Ok(Array.Empty<AiCallListItem>());
     return Results.Ok(await repository.ListCallsAsync(search, audioClass, reviewStatus, page ?? 1, pageSize ?? 50, ct));
 });
 
@@ -810,7 +811,9 @@ app.MapGet("/api/ai/calls/{logicalCallId:long}", async (
     AiAnalysisRepository repository,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    if (!await repository.IsInstalledAsync(ct))
+        return Results.NotFound(new { error = "AI analysis module is not installed." });
     var result = await repository.GetCallAsync(logicalCallId, ct);
     return result is null ? Results.NotFound(new { error = "AI call was not found." }) : Results.Ok(result);
 });
@@ -823,7 +826,8 @@ app.MapGet("/api/ai/reviews", async (
     AiAnalysisRepository repository,
     CancellationToken ct) =>
 {
-    if (!CanWriteInternalData(context, configuration)) return Results.Unauthorized();
+    if (!CanReadInternalData(context, configuration)) return Results.Unauthorized();
+    if (!await repository.IsInstalledAsync(ct)) return Results.Ok(Array.Empty<AiReviewView>());
     return Results.Ok(await repository.ListReviewsAsync(status, take ?? 200, ct));
 });
 

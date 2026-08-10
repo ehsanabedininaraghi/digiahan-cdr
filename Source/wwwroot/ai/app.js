@@ -1,16 +1,17 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
-const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false };
+const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false, demoMode: false, sampleDetails: {} };
 const labels = {
-  BUSINESS_CONVERSATION: "مکالمه کاری", NEEDS_REVIEW: "نیازمند بررسی",
+  BUSINESS_CONVERSATION: "مکالمه کاری", QUEUE_ONLY: "فقط صدای صف", NEEDS_REVIEW: "نیازمند بررسی",
   NON_SPEECH_OR_UNSUPPORTED: "غیرگفتاری / پشتیبانی‌نشده", EMPTY_OR_LOW_SIGNAL: "خالی / سیگنال ضعیف",
   OPEN: "باز", CONFIRMED: "تأییدشده", CORRECTED: "اصلاح‌شده", REJECTED: "ردشده", DEFERRED: "موکول‌شده",
   COMPLETED: "تکمیل‌شده", READY: "آماده", LOCAL_PURGED: "پردازش کامل؛ فایل موقت حذف شده",
   TRANSCRIBING: "در حال تبدیل صدا به متن", ANALYZING: "در حال تحلیل", TRANSFERRING: "در حال انتقال",
   SOURCE_MISSING: "فایل مبدا پیدا نشد", VALIDATION_FAILED: "اعتبارسنجی ناموفق", FAILED: "ناموفق",
   TOPIC: "موضوع", BRAND: "برند", NON_PURCHASE_REASON: "دلیل عدم خرید", BEHAVIOR_INDICATOR: "نشانه رفتاری",
-  RISK_SIGNAL: "نشانه حساس", SENSITIVE_RISK: "نشانه حساس", LOW_CONFIDENCE: "اطمینان پایین"
+  RISK_SIGNAL: "نشانه حساس", SENSITIVE_RISK: "نشانه حساس", LOW_CONFIDENCE: "اطمینان پایین",
+  HIGH: "بالا", MEDIUM: "متوسط", LOW: "کم"
 };
 
 function token() { return sessionStorage.getItem("digiahanApiToken") || ""; }
@@ -75,6 +76,8 @@ async function refreshAll() {
     const requests = [api(queryCalls()), api(`/api/ai/reviews?status=${encodeURIComponent(queueStatus)}&take=200`), api("/api/ai/status")];
     if (queueStatus !== "OPEN") requests.push(api("/api/ai/reviews?status=OPEN&take=500"));
     const [calls, reviews, status, openReviews] = await Promise.all(requests);
+    state.demoMode = false;
+    state.sampleDetails = {};
     state.calls = Array.isArray(calls) ? calls : [];
     state.reviews = Array.isArray(reviews) ? reviews : [];
     renderCalls();
@@ -82,11 +85,42 @@ async function refreshAll() {
     renderStatus(status, queueStatus === "OPEN" ? state.reviews : (openReviews || []));
     if (state.detailId) await loadDetail(state.detailId, false);
   } catch (error) {
-    showNotice(error.message, true);
+    try { await loadSampleData(error); }
+    catch { showNotice(error.message, true); }
   } finally {
     state.loading = false;
     $("loadingCalls").textContent = "";
   }
+}
+
+async function loadSampleData(cause) {
+  const response = await fetch(`/ai/sample-data.json?v=4381`, { cache: "no-store" });
+  if (!response.ok) throw cause;
+  const sample = await response.json();
+  const search = $("search").value.trim().toLocaleLowerCase("fa");
+  const audioClass = $("audioClass").value;
+  const reviewStatus = $("callReviewStatus").value;
+  const queueStatus = $("queueStatus").value;
+  state.demoMode = true;
+  const allReviews = sample.reviews || [];
+  state.sampleDetails = Object.fromEntries((sample.calls || []).map(call => [call.logicalCallId, {
+    call,
+    transcriptText: "متن کامل در خروجی محلی نگهداری می‌شود و برای حفاظت از اطلاعات تماس در حالت نمایشی شبکه منتشر نشده است.",
+    segmentsJson: null,
+    recording: call.sampleRecording || null,
+    facts: call.sampleFacts || [],
+    reviewItems: allReviews.filter(item => item.logicalCallId === call.logicalCallId)
+  }]));
+  state.calls = (sample.calls || []).filter(call =>
+    (!search || JSON.stringify(call).toLocaleLowerCase("fa").includes(search)) &&
+    (!audioClass || call.audioClass === audioClass) &&
+    (!reviewStatus || (call.reviewStatuses || []).includes(reviewStatus)));
+  state.reviews = allReviews.filter(item => queueStatus === "ALL" || item.reviewStatus === queueStatus);
+  renderCalls();
+  renderReviews();
+  renderStatus(sample.status || {}, allReviews.filter(item => item.reviewStatus === "OPEN"));
+  showNotice(`حالت نمونه امن فعال است: ۶ تحلیل آزمایشی نمایش داده می‌شود. علت اتصال عملیاتی: ${cause.message}`);
+  if (state.detailId && state.sampleDetails[state.detailId]) renderDetail(state.sampleDetails[state.detailId]);
 }
 
 function renderStatus(status, openReviews) {
@@ -94,6 +128,11 @@ function renderStatus(status, openReviews) {
   $("businessCount").textContent = fa(state.calls.filter(call => call.audioClass === "BUSINESS_CONVERSATION").length);
   $("openReviewCount").textContent = fa(openReviews.length);
   const ingestion = status?.recordingIngestion || {};
+  if (state.demoMode) {
+    $("ingestionState").textContent = "حالت نمونه";
+    $("ingestionHint").textContent = "انتقال خودکار از ایزابل هنوز فعال نیست";
+    return;
+  }
   $("ingestionState").textContent = ingestion.enabled ? "فعال" : "غیرفعال";
   $("ingestionHint").textContent = ingestion.enabled
     ? (ingestion.credentialsConfigured ? "آماده دریافت فایل‌های امروز" : "اطلاعات اتصال کامل نیست")
@@ -125,6 +164,10 @@ async function loadDetail(id, announce = true) {
     $("emptyDetail").classList.add("hidden");
     $("detailContent").classList.remove("hidden");
     $("detailTitle").textContent = "در حال دریافت جزئیات…";
+  }
+  if (state.demoMode && state.sampleDetails[id]) {
+    renderDetail(state.sampleDetails[id]);
+    return;
   }
   try {
     const detail = await api(`/api/ai/calls/${id}`);
@@ -179,7 +222,7 @@ function renderReviewItems(items, compact = false) {
     <p>${esc(item.rawText || item.resolution || "شاهد متنی ثبت نشده است.")}</p>
     <div class="review-meta"><span>علت: ${esc(tr(item.reasonCode))}</span><span>زمان: ${clock(item.startSeconds)} تا ${clock(item.endSeconds)}</span>${compact ? "" : `<span>تماس: ${fa(item.logicalCallId)}</span>`}</div>
     ${item.resolution ? `<p class="muted">تصمیم ثبت‌شده: ${esc(item.resolution)}</p>` : ""}
-    ${item.reviewStatus === "OPEN" || item.reviewStatus === "DEFERRED" ? `<div class="review-actions">
+    ${!state.demoMode && (item.reviewStatus === "OPEN" || item.reviewStatus === "DEFERRED") ? `<div class="review-actions">
       <button data-review-id="${item.reviewItemId}" data-action="CONFIRMED">تأیید</button>
       <button class="secondary" data-review-id="${item.reviewItemId}" data-action="CORRECTED">اصلاح</button>
       <button class="reject" data-review-id="${item.reviewItemId}" data-action="REJECTED">رد</button>
@@ -200,6 +243,10 @@ function bindReviewActions(root) {
   }));
 }
 async function resolveReview(id, status) {
+  if (state.demoMode) {
+    showNotice("ثبت تصمیم در حالت نمونه غیرفعال است؛ داده نمایشی به دیتابیس متصل نیست.");
+    return;
+  }
   let resolution = "";
   if (status === "CORRECTED") {
     resolution = window.prompt("متن صحیح یا توضیح اصلاح را وارد کنید:", "") || "";

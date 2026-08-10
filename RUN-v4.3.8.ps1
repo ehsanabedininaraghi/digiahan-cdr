@@ -53,6 +53,7 @@ $relativeFiles = @(
     "Source\wwwroot\agent\index.html",
     "Source\wwwroot\ai\app.js",
     "Source\wwwroot\ai\index.html",
+    "Source\wwwroot\ai\sample-data.json",
     "Source\wwwroot\ai\style.css",
     "Source\wwwroot\invoice-notifications\app.js",
     "Source\wwwroot\invoice-notifications\index.html",
