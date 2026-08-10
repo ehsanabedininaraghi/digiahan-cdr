@@ -105,7 +105,9 @@ public sealed class CustomerIntelligenceRepository
             suggestion,
             lastInvoiceDaysAgo,
             identitySource,
-            rankReason);
+            rankReason,
+            accounting?.AccountBalance,
+            accounting?.CreditLimit);
     }
 
 
@@ -130,20 +132,35 @@ public sealed class CustomerIntelligenceRepository
             await connection.OpenAsync(ct);
 
             const string sql = """
-            IF OBJECT_ID(N'dbo.CustomerPhoneDirectory',N'V') IS NOT NULL
-            BEGIN
-                SELECT TOP(1)
-                    DisplayName,
-                    CompanyName,
-                    OwnerName,
-                    DidarContactCode,
-                    AccountingDetailCode,
-                    MatchSource,
-                    IsVerified
-                FROM dbo.CustomerPhoneDirectory
+            ;WITH MatchedPhone AS
+            (
+                SELECT TOP(1) IdentityId,SourceSystem,IsVerified
+                FROM dbo.CustomerIdentityPhones
                 WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
-                ORDER BY IsVerified DESC,IdentityId;
-            END;
+                ORDER BY IsVerified DESC,Priority,Id
+            )
+            SELECT
+                COALESCE(NULLIF(d.FullName,N''),NULLIF(i.DisplayName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
+                COALESCE(NULLIF(d.CompanyName,N''),NULLIF(i.CompanyName,N''),NULLIF(a.CustomerName,N'')),
+                COALESCE(NULLIF(d.OwnerName,N''),NULLIF(i.OwnerName,N'')),
+                d.DidarContactCode,a.DetailCode,p.SourceSystem,p.IsVerified
+            FROM MatchedPhone p
+            INNER JOIN dbo.CustomerIdentities i ON i.IdentityId=p.IdentityId
+            OUTER APPLY
+            (
+                SELECT TOP(1) dc.DidarContactCode,dc.FullName,dc.CompanyName,dc.OwnerName
+                FROM dbo.CustomerIdentityDidarLinks l
+                INNER JOIN dbo.DidarContacts dc ON dc.DidarContactCode=l.DidarContactCode AND ISNULL(dc.IsDeleted,0)=0
+                WHERE l.IdentityId=p.IdentityId
+                ORDER BY l.IsVerified DESC,l.Id
+            ) d
+            OUTER APPLY
+            (
+                SELECT TOP(1) DetailCode,CustomerName
+                FROM dbo.CustomerIdentityAccountingLinks
+                WHERE IdentityId=p.IdentityId
+                ORDER BY IsVerified DESC,FiscalYear DESC,Id
+            ) a;
             """;
 
             await using var command = new SqlCommand(sql, connection)
@@ -205,7 +222,9 @@ public sealed class CustomerIntelligenceRepository
             suggestion,
             null,
             identitySource,
-            known ? "بازیابی سریع از دفترچه یکپارچه مشتریان" : "شماره در دفترچه مشتریان پیدا نشد");
+            known ? "بازیابی سریع از دفترچه یکپارچه مشتریان" : "شماره در دفترچه مشتریان پیدا نشد",
+            null,
+            null);
     }
 
     private static async Task<IdentityInfo?> FindIdentity(
@@ -214,16 +233,37 @@ public sealed class CustomerIntelligenceRepository
         CancellationToken ct)
     {
         const string sql = """
-        IF OBJECT_ID(N'dbo.CustomerPhoneDirectory',N'V') IS NOT NULL
-        BEGIN
-            SELECT TOP(1)
-                IdentityId,DisplayName,CompanyName,OwnerName,DidarContactCode,
-                SourceDatabase,FiscalYear,AccountingDetailCode,AccountingShortCode,
-                MatchSource,IsVerified
-            FROM dbo.CustomerPhoneDirectory
+        ;WITH MatchedPhone AS
+        (
+            SELECT TOP(1) IdentityId,SourceSystem,IsVerified
+            FROM dbo.CustomerIdentityPhones
             WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
-            ORDER BY IsVerified DESC,IdentityId;
-        END;
+            ORDER BY IsVerified DESC,Priority,Id
+        )
+        SELECT
+            p.IdentityId,
+            COALESCE(NULLIF(d.FullName,N''),NULLIF(i.DisplayName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
+            COALESCE(NULLIF(d.CompanyName,N''),NULLIF(i.CompanyName,N''),NULLIF(a.CustomerName,N'')),
+            COALESCE(NULLIF(d.OwnerName,N''),NULLIF(i.OwnerName,N'')),
+            d.DidarContactCode,a.SourceDatabase,a.FiscalYear,a.DetailCode,a.ShortCode,
+            p.SourceSystem,p.IsVerified
+        FROM MatchedPhone p
+        INNER JOIN dbo.CustomerIdentities i ON i.IdentityId=p.IdentityId
+        OUTER APPLY
+        (
+            SELECT TOP(1) dc.DidarContactCode,dc.FullName,dc.CompanyName,dc.OwnerName
+            FROM dbo.CustomerIdentityDidarLinks l
+            INNER JOIN dbo.DidarContacts dc ON dc.DidarContactCode=l.DidarContactCode AND ISNULL(dc.IsDeleted,0)=0
+            WHERE l.IdentityId=p.IdentityId
+            ORDER BY l.IsVerified DESC,l.Id
+        ) d
+        OUTER APPLY
+        (
+            SELECT TOP(1) SourceDatabase,FiscalYear,DetailCode,ShortCode,CustomerName
+            FROM dbo.CustomerIdentityAccountingLinks
+            WHERE IdentityId=p.IdentityId
+            ORDER BY IsVerified DESC,FiscalYear DESC,Id
+        ) a;
         """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -254,6 +294,15 @@ public sealed class CustomerIntelligenceRepository
         CancellationToken ct)
     {
         const string sql = """
+        DECLARE @resolvedCode nvarchar(100)=@code;
+        IF @resolvedCode IS NULL
+        BEGIN
+            SELECT TOP(1) @resolvedCode=DidarContactCode
+            FROM dbo.DidarContactPhones
+            WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
+            ORDER BY IsPrimary DESC,Id;
+        END;
+
         SELECT TOP(1)
             dc.DidarContactCode,
             dc.FullName,
@@ -261,18 +310,7 @@ public sealed class CustomerIntelligenceRepository
             dc.OwnerName
         FROM dbo.DidarContacts dc
         WHERE dc.IsDeleted=0
-          AND
-          (
-              (@code IS NOT NULL AND dc.DidarContactCode=@code)
-              OR EXISTS
-              (
-                  SELECT 1
-                  FROM dbo.DidarContactPhones p
-                  WHERE p.DidarContactCode=dc.DidarContactCode
-                    AND p.NormalizedPhone=dbo.NormalizeIranPhone(@phone)
-              )
-          )
-        ORDER BY CASE WHEN dc.DidarContactCode=@code THEN 0 ELSE 1 END;
+          AND dc.DidarContactCode=@resolvedCode;
         """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -297,16 +335,42 @@ public sealed class CustomerIntelligenceRepository
         CancellationToken ct)
     {
         const string sql = """
+        ;WITH TargetIdentity AS
+        (
+            SELECT TOP(1) IdentityId
+            FROM dbo.CustomerIdentityPhones
+            WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
+            ORDER BY IsVerified DESC,Priority,Id
+        ),
+        CustomerPhones AS
+        (
+            SELECT p.NormalizedPhone
+            FROM dbo.CustomerIdentityPhones p
+            WHERE p.IdentityId=(SELECT TOP(1) IdentityId FROM TargetIdentity)
+            UNION SELECT dbo.NormalizeIranPhone(@phone)
+        ),
+        CustomerPhoneVariants AS
+        (
+            SELECT NormalizedPhone Phone FROM CustomerPhones WHERE NormalizedPhone IS NOT NULL
+            UNION SELECT SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
+            UNION SELECT N'98'+SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
+            UNION SELECT N'0098'+SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
+            UNION SELECT N'+98'+SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
+        ),
+        MatchingCalls AS
+        (
+            SELECT r.RawCDRId,r.Calldate,r.LinkedId,r.UniqueId
+            FROM dbo.RawCDR r INNER JOIN CustomerPhoneVariants p ON p.Phone=r.Src
+            WHERE r.Calldate>=DATEADD(day,-30,SYSDATETIME())
+            UNION
+            SELECT r.RawCDRId,r.Calldate,r.LinkedId,r.UniqueId
+            FROM dbo.RawCDR r INNER JOIN CustomerPhoneVariants p ON p.Phone=r.Dst
+            WHERE r.Calldate>=DATEADD(day,-30,SYSDATETIME())
+        )
         SELECT
             MAX(r.Calldate) AS LastCallAt,
             COUNT(DISTINCT COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))) AS CallsLast30Days
-        FROM dbo.RawCDR r
-        WHERE r.Calldate>=DATEADD(day,-30,SYSDATETIME())
-          AND
-          (
-              dbo.NormalizeIranPhone(r.Src)=dbo.NormalizeIranPhone(@phone)
-              OR dbo.NormalizeIranPhone(r.Dst)=dbo.NormalizeIranPhone(@phone)
-          );
+        FROM MatchingCalls r;
         """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -397,30 +461,47 @@ public sealed class CustomerIntelligenceRepository
         if (key is null)
             return null;
 
+        var calendar = new PersianCalendar();
+        var cutoffDate = DateTime.Today.AddDays(-29);
+        var cutoff = $"{calendar.GetYear(cutoffDate):0000}/{calendar.GetMonth(cutoffDate):00}/{calendar.GetDayOfMonth(cutoffDate):00}";
+
         const string summarySql = """
         SELECT
-            COUNT(*) AS InvoiceCount,
-            ISNULL(SUM(i.Amount),0) AS Sales30Days
-        FROM dbo.AccountingInvoices i
-        WHERE i.SourceDatabase=@db
-          AND i.FiscalYear=@fy
-          AND i.CustomerDetailCode=@detail;
+            COUNT(i.FactorCode) AS InvoiceCount,
+            ISNULL(SUM(i.Amount),0) AS Sales30Days,
+            c.AccountBalance,
+            c.CreditLimit
+        FROM dbo.AccountingCustomers c
+        LEFT JOIN dbo.AccountingInvoices i
+          ON i.SourceDatabase=c.SourceDatabase
+         AND i.FiscalYear=c.FiscalYear
+         AND i.CustomerDetailCode=c.DetailCode
+         AND i.FactorDate>=@cutoff
+        WHERE c.SourceDatabase=@db
+          AND c.FiscalYear=@fy
+          AND c.DetailCode=@detail
+        GROUP BY c.AccountBalance,c.CreditLimit;
         """;
 
         int invoiceCount;
         decimal sales;
+        decimal? accountBalance;
+        decimal? creditLimit;
 
         await using (var command = new SqlCommand(summarySql, connection))
         {
             command.Parameters.Add("@db", SqlDbType.NVarChar, 128).Value = key.SourceDatabase;
             command.Parameters.Add("@fy", SqlDbType.Int).Value = key.FiscalYear;
             command.Parameters.Add("@detail", SqlDbType.NVarChar, 30).Value = key.DetailCode;
+            command.Parameters.Add("@cutoff", SqlDbType.NVarChar, 10).Value = cutoff;
 
             await using var reader = await command.ExecuteReaderAsync(ct);
             await reader.ReadAsync(ct);
 
             invoiceCount = reader.IsDBNull(0) ? 0 : Convert.ToInt32(reader[0]);
             sales = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1);
+            accountBalance = reader.IsDBNull(2) ? null : reader.GetDecimal(2);
+            creditLimit = reader.IsDBNull(3) ? null : reader.GetDecimal(3);
         }
 
         const string lastInvoiceSql = """
@@ -465,7 +546,9 @@ public sealed class CustomerIntelligenceRepository
             lastAmount,
             lastProduct,
             invoiceCount,
-            sales);
+            sales,
+            accountBalance,
+            creditLimit);
     }
 
     public static string NormalizePhone(string? value)
@@ -652,5 +735,7 @@ public sealed class CustomerIntelligenceRepository
         decimal? LastInvoiceAmount,
         string? LastProduct,
         int InvoiceCount,
-        decimal Sales30Days);
+        decimal Sales30Days,
+        decimal? AccountBalance,
+        decimal? CreditLimit);
 }

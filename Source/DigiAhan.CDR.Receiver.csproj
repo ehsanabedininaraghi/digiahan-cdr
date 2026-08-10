@@ -24,4 +24,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- Seller V2 stays isolated from the legacy /agent UI while it is piloted. -->
+  <ItemGroup>
+    <Content Include="..\payload\Source\wwwroot\seller-v2\**\*"
+             Link="wwwroot\seller-v2\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

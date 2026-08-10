@@ -59,6 +59,10 @@ BEGIN
         EconomicCode nvarchar(100) NULL,
         CustomerTel nvarchar(200) NULL,
         CustomerAddress nvarchar(400) NULL,
+        Debit decimal(19,4) NULL,
+        Credit decimal(19,4) NULL,
+        AccountBalance decimal(19,4) NULL,
+        CreditLimit decimal(19,4) NULL,
         ImportedAtUtc datetime2(0) NOT NULL,
         CONSTRAINT PK_AccountingCustomers PRIMARY KEY(SourceDatabase, FiscalYear, DetailCode)
     );
@@ -93,6 +97,22 @@ BEGIN
     CREATE INDEX IX_AccountingInvoices_Customer
         ON dbo.AccountingInvoices(SourceDatabase, FiscalYear, CustomerDetailCode);
 END;
+
+IF OBJECT_ID(N'dbo.AccountingCustomers',N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.AccountingCustomers',N'Debit') IS NULL
+    ALTER TABLE dbo.AccountingCustomers ADD Debit decimal(19,4) NULL;
+
+IF OBJECT_ID(N'dbo.AccountingCustomers',N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.AccountingCustomers',N'Credit') IS NULL
+    ALTER TABLE dbo.AccountingCustomers ADD Credit decimal(19,4) NULL;
+
+IF OBJECT_ID(N'dbo.AccountingCustomers',N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.AccountingCustomers',N'CreditLimit') IS NULL
+    ALTER TABLE dbo.AccountingCustomers ADD CreditLimit decimal(19,4) NULL;
+
+IF OBJECT_ID(N'dbo.AccountingCustomers',N'U') IS NOT NULL
+AND COL_LENGTH(N'dbo.AccountingCustomers',N'AccountBalance') IS NULL
+    ALTER TABLE dbo.AccountingCustomers ADD AccountBalance decimal(19,4) NULL;
 
 IF OBJECT_ID(N'dbo.AccountingInvoices', N'U') IS NOT NULL
 AND COL_LENGTH(N'dbo.AccountingInvoices',N'FactorDescription') IS NULL

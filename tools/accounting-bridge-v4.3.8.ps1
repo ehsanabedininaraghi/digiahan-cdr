@@ -281,15 +281,22 @@ function Read-Customers {
     $table = New-DataTable "Customers" ([ordered]@{
         SourceDatabase=[string];FiscalYear=[int];DetailCode=[string];ShortCode=[string];
         CustomerName=[string];ManagerName=[string];EconomicCode=[string];CustomerTel=[string];
-        CustomerAddress=[string];ImportedAtUtc=[datetime]
+        CustomerAddress=[string];Debit=[decimal];Credit=[decimal];AccountBalance=[decimal];CreditLimit=[decimal];ImportedAtUtc=[datetime]
     })
 
     $sql = @"
 SELECT
-    detailcode,shortcode,customername,managername,
-    economiccode,customertel,customeraddress
-FROM customer
-ORDER BY detailcode
+    c.detailcode,c.shortcode,c.customername,c.managername,
+    c.economiccode,c.customertel,c.customeraddress,
+    c.bed AS debit,c.bes AS credit,b.accountbalance,c.maxetebar AS creditlimit
+FROM customer c
+LEFT JOIN
+(
+    SELECT LTRIM(RTRIM(accshortcode)) AS shortcode,SUM(mande) AS accountbalance
+    FROM Rozane30
+    GROUP BY LTRIM(RTRIM(accshortcode))
+) b ON b.shortcode=LTRIM(RTRIM(c.shortcode))
+ORDER BY c.detailcode
 "@
 
     $rs = $Ado.Execute($sql)
@@ -305,6 +312,10 @@ ORDER BY detailcode
                     EconomicCode=[string]$rs.Fields.Item("economiccode").Value;
                     CustomerTel=[string]$rs.Fields.Item("customertel").Value;
                     CustomerAddress=[string]$rs.Fields.Item("customeraddress").Value;
+                    Debit=Decimal-Value $rs.Fields.Item("debit").Value;
+                    Credit=Decimal-Value $rs.Fields.Item("credit").Value;
+                    AccountBalance=Decimal-Value $rs.Fields.Item("accountbalance").Value;
+                    CreditLimit=Decimal-Value $rs.Fields.Item("creditlimit").Value;
                     ImportedAtUtc=$ImportedAt
                 }
             }
@@ -562,7 +573,7 @@ FROM dbo.AccountingVisitors;
 
 SELECT TOP(0)
     SourceDatabase,FiscalYear,DetailCode,ShortCode,CustomerName,ManagerName,
-    EconomicCode,CustomerTel,CustomerAddress,ImportedAtUtc
+    EconomicCode,CustomerTel,CustomerAddress,Debit,Credit,AccountBalance,CreditLimit,ImportedAtUtc
 INTO $customerStage
 FROM dbo.AccountingCustomers;
 "@
@@ -606,13 +617,17 @@ WHEN MATCHED THEN UPDATE SET
     EconomicCode=source.EconomicCode,
     CustomerTel=source.CustomerTel,
     CustomerAddress=source.CustomerAddress,
+    Debit=source.Debit,
+    Credit=source.Credit,
+    AccountBalance=source.AccountBalance,
+    CreditLimit=source.CreditLimit,
     ImportedAtUtc=source.ImportedAtUtc
 WHEN NOT MATCHED BY TARGET THEN
     INSERT(SourceDatabase,FiscalYear,DetailCode,ShortCode,CustomerName,ManagerName,
-           EconomicCode,CustomerTel,CustomerAddress,ImportedAtUtc)
+           EconomicCode,CustomerTel,CustomerAddress,Debit,Credit,AccountBalance,CreditLimit,ImportedAtUtc)
     VALUES(source.SourceDatabase,source.FiscalYear,source.DetailCode,source.ShortCode,
            source.CustomerName,source.ManagerName,source.EconomicCode,source.CustomerTel,
-           source.CustomerAddress,source.ImportedAtUtc);
+           source.CustomerAddress,source.Debit,source.Credit,source.AccountBalance,source.CreditLimit,source.ImportedAtUtc);
 
 DROP TABLE $visitorStage;
 DROP TABLE $customerStage;

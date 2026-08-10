@@ -1,0 +1,267 @@
+const $=id=>document.getElementById(id);
+const fa=n=>new Intl.NumberFormat("fa-IR",{minimumIntegerDigits:2,useGrouping:false}).format(n);
+let step=1,callInterval=null,callSeconds=0;
+let sellerToken=sessionStorage.getItem("sellerV2Token")||"";
+let currentCustomerPhone="09122832869",currentCallLinkedId=null;
+let lastLiveEventKey="",lastEnrichedEventKey="",livePollBusy=false;
+const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]);
+const newId=()=>{
+  const bytes=new Uint8Array(16);
+  if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);else for(let i=0;i<16;i++)bytes[i]=Math.floor(Math.random()*256);
+  bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=[...bytes].map(x=>x.toString(16).padStart(2,"0")).join("");
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+};
+
+async function api(path,options={}){
+  const response=await fetch(path,{...options,cache:"no-store",headers:{"Content-Type":"application/json","X-Seller-Token":sellerToken,...(options.headers||{})}});
+  if(response.status===401){sellerToken="";sessionStorage.removeItem("sellerV2Token");$("accessGate").classList.remove("hidden");throw new Error("UNAUTHORIZED")}
+  if(!response.ok){let message=`خطای ${response.status}`;try{message=(await response.json()).error||message}catch{}throw new Error(message)}
+  return response.status===204?null:response.json();
+}
+
+const toast=message=>{
+  const el=$("toast");
+  el.textContent=message;el.classList.remove("hidden");
+  clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.add("hidden"),2600);
+};
+
+function setToday(){
+  const text=new Intl.DateTimeFormat("fa-IR",{weekday:"long",day:"numeric",month:"long"}).format(new Date());
+  $("todayLabel").textContent=text;
+  const date=new Date();date.setDate(date.getDate()+1);
+  $("followDate").value=formatJalaliDate(date);
+}
+
+function formatJalaliDate(date){
+  const parts=new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-latn",{year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+  const get=type=>parts.find(x=>x.type===type)?.value;
+  return `${get("year")}/${get("month")}/${get("day")}`;
+}
+
+function jalaliToLocalDate(value){
+  const latin=String(value||"").replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));
+  const match=latin.trim().match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if(!match)return null;
+  const month=Number(match[2]),day=Number(match[3]);
+  if(month<1||month>12||day<1||day>31||(month>6&&day>30))return null;
+  const target=`${match[1]}/${match[2].padStart(2,"0")}/${match[3].padStart(2,"0")}`;
+  const start=new Date(Number(match[1])+621,1,20);
+  for(let i=0;i<410;i++){
+    const candidate=new Date(start);candidate.setDate(start.getDate()+i);
+    if(formatJalaliDate(candidate)===target)return candidate;
+  }
+  return null;
+}
+
+function openDrawer(source="interaction"){
+  $("drawerEyebrow").textContent=source==="call"?"تماس پایان یافت · ثبت نتیجه":"ثبت تعامل جدید";
+  $("drawerBackdrop").classList.remove("hidden");
+  $("interactionDrawer").classList.remove("hidden");
+  document.body.style.overflow="hidden";
+  setStep(1);
+}
+
+function closeDrawer(){
+  $("drawerBackdrop").classList.add("hidden");
+  $("interactionDrawer").classList.add("hidden");
+  document.body.style.overflow="";
+}
+
+function setStep(value){
+  step=Math.min(3,Math.max(1,value));
+  document.querySelectorAll(".form-step").forEach(el=>el.classList.toggle("active",Number(el.dataset.step)===step));
+  document.querySelectorAll(".drawer-progress i").forEach((el,index)=>el.classList.toggle("active",index<step));
+  const labels=["نیاز مشتری","اقدامات انجام‌شده","نتیجه و اقدام بعدی"];
+  $("stepLabel").textContent=`${fa(step)} از ۳ · ${labels[step-1]}`;
+  $("prevStep").classList.toggle("hidden",step===1);
+  $("nextStep").classList.toggle("hidden",step===3);
+  $("saveInteraction").classList.toggle("hidden",step!==3);
+  $("interactionDrawer").querySelector("form").scrollTop=0;
+}
+
+function updateConditionalFields(){
+  const outcome=document.querySelector('input[name="outcome"]:checked')?.value;
+  $("followUpFields").classList.toggle("hidden",outcome!=="FOLLOW_UP");
+  $("lossFields").classList.toggle("hidden",outcome!=="LOST");
+}
+
+function startCall(){
+  if(callInterval)return;
+  callSeconds=0;
+  $("activeCallCard").classList.remove("hidden");
+  $("simulateCall").disabled=true;$("simulateCall").innerHTML="<span>●</span> تماس فعال";
+  callInterval=setInterval(()=>{
+    callSeconds++;
+    $("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`;
+  },1000);
+  window.scrollTo({top:document.querySelector(".content-grid").offsetTop-100,behavior:"smooth"});
+  toast("تماس ورودی آریا سازه متصل شد");
+}
+
+function endCall(){
+  if(lastLiveEventKey)localStorage.setItem("sellerV2DismissedCall",lastLiveEventKey);
+  clearInterval(callInterval);callInterval=null;
+  $("activeCallCard").classList.add("hidden");
+  $("simulateCall").disabled=false;$("simulateCall").innerHTML="<span>☎</span> شبیه‌سازی تماس";
+  openDrawer("call");
+}
+
+function showLiveCall(card){
+  if(!card)return;
+  const key=card.linkedId||`${card.extension}|${card.callerNumber}|${card.eventTimeUtc}`;
+  const isNew=key!==lastLiveEventKey;
+  lastLiveEventKey=key;
+  if(localStorage.getItem("sellerV2DismissedCall")===key)return;
+  const age=Date.now()-new Date(card.eventTimeUtc).getTime();
+  if(!Number.isFinite(age)||age<0||age>5*60*1000)return;
+  currentCustomerPhone=card.callerNumber;currentCallLinkedId=card.linkedId;
+  $("customerName").textContent=card.companyName||card.customerName||"مشتری جدید";
+  $("contactName").textContent=card.customerName||"نام ثبت نشده";$("customerPhone").textContent=card.callerNumber;
+  $("customerState").textContent=card.isKnownCustomer?"مشتری فعال":"مشتری جدید";
+  if(card.identitySource&&card.identitySource!=="PENDING"&&lastEnrichedEventKey!==key){
+    lastEnrichedEventKey=key;loadWorkspace(card.callerNumber).catch(console.error);
+  }
+  if(!isNew)return;
+  $("activeCallCard").classList.remove("hidden");
+  $("simulateCall").disabled=true;$("simulateCall").innerHTML="<span>●</span> تماس واقعی";
+  callSeconds=Math.max(0,Math.floor(age/1000));
+  if(!callInterval)callInterval=setInterval(()=>{callSeconds++;$("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`},1000);
+  toast(`تماس واقعی ${card.customerName||card.companyName||card.callerNumber} وارد شد`);
+}
+
+async function pollLiveCall(){
+  if(!sellerToken||livePollBusy||location.protocol==="file:")return;
+  livePollBusy=true;
+  try{showLiveCall(await api("/api/seller-v2/current-call"))}catch(error){if(error.message!=="UNAUTHORIZED")console.warn(error)}
+  finally{livePollBusy=false}
+}
+
+async function saveInteraction(){
+  const outcome=document.querySelector('input[name="outcome"]:checked')?.value;
+  if(outcome==="FOLLOW_UP"&&!$("followDate").value){toast("تاریخ پیگیری را مشخص کنید");return}
+  if(outcome==="LOST"&&!document.querySelector('input[name="loss"]:checked')){toast("دلیل عدم خرید را انتخاب کنید");return}
+  const labels={ORDER:"سفارش ثبت شد",DECIDING:"در حال تصمیم‌گیری",FOLLOW_UP:"پیگیری ثبت شد",LOST:"عدم خرید ثبت شد",NON_SALES:"تماس غیر فروش ثبت شد"};
+  if(location.protocol!=="file:"){
+    const checks=[...document.querySelectorAll(".check-grid input")];
+    const actionCodes=["PRICE_QUOTED","STOCK_CHECKED","PAYMENT_EXPLAINED","ALTERNATIVE_OFFERED"];
+    const date=jalaliToLocalDate($("followDate").value),time=document.querySelector('#followUpFields input[type="time"]').value;
+    if(outcome==="FOLLOW_UP"&&!date){toast("تاریخ شمسی را به شکل ۱۴۰۵/۰۵/۲۰ وارد کنید");return}
+    const payload={idempotencyKey:newId(),customerPhone:currentCustomerPhone,callLinkedId:currentCallLinkedId,
+      productName:$("product").value,productSize:$("size").value,productBrand:document.querySelector('.form-step[data-step="1"] select:nth-of-type(3)')?.value||null,
+      quantity:Number(document.querySelector('.compound-input input').value)||null,quantityUnit:document.querySelector('.compound-input select').value,
+      actions:checks.flatMap((item,index)=>item.checked?[actionCodes[index]]:[]),outcome,
+      lossReason:outcome==="LOST"?document.querySelector('input[name="loss"]:checked')?.value:null,
+      followUpAtUtc:outcome==="FOLLOW_UP"?new Date(date.getFullYear(),date.getMonth(),date.getDate(),Number(time.split(":")[0]),Number(time.split(":")[1])).toISOString():null,
+      followUpSubject:outcome==="FOLLOW_UP"?document.querySelector('#followUpFields input[type="text"]').value:null,
+      note:document.querySelector('.full-field textarea').value||null};
+    $("saveInteraction").disabled=true;$("saveInteraction").textContent="در حال ثبت…";
+    try{await api("/api/seller-v2/interactions",{method:"POST",body:JSON.stringify(payload)})}
+    catch(error){toast(error.message==="UNAUTHORIZED"?"دسترسی منقضی شده است":error.message);return}
+    finally{$("saveInteraction").disabled=false;$("saveInteraction").textContent="ثبت نتیجه مکالمه"}
+  }
+  closeDrawer();toast(`${labels[outcome]}؛ اطلاعات با موفقیت ذخیره شد`);
+  const timeline=$("timeline");
+  const item=document.createElement("article");
+  item.className="timeline-item mine";item.dataset.kind="mine";
+  item.innerHTML=`<div class="timeline-icon follow">✓</div><div class="timeline-content"><header><div><b>${labels[outcome]}</b><span>همین حالا · توسط حسنا مظاهری</span></div><time>اکنون</time></header><p>۲۰ تن تیرآهن سایز ۱۶ ذوب‌آهن؛ قیمت و موجودی بررسی شد.</p><div class="tag-row"><span>تیرآهن ۱۶</span><span class="blue-tag">تعامل جدید</span></div></div>`;
+  const firstItem=timeline.querySelector(".timeline-item");
+  timeline.insertBefore(item,firstItem);
+  if(location.protocol!=="file:")loadWorkspace(currentCustomerPhone).catch(console.error);
+}
+
+function formatDate(value){return new Intl.DateTimeFormat("fa-IR",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(value))}
+function relativeDate(value){if(!value)return"—";const days=Math.floor((Date.now()-new Date(value).getTime())/86400000);return days<=0?"امروز":`${days.toLocaleString("fa-IR")} روز پیش`}
+function money(value){return new Intl.NumberFormat("fa-IR",{maximumFractionDigits:0}).format(Number(value)||0)}
+function renderBalance(value,creditLimit){
+  if(value==null){$("snapshotBalance").textContent="—";$("snapshotBalanceStatus").textContent="اطلاعات مانده موجود نیست";return}
+  const amount=Number(value);
+  $("snapshotBalance").textContent=`${money(Math.abs(amount))} ریال`;
+  const state=amount>0?"بدهکار":amount<0?"بستانکار":"تسویه";
+  $("snapshotBalanceStatus").textContent=creditLimit==null?state:`${state} · سقف اعتبار ${money(creditLimit)} ریال`;
+}
+function outcomeLabel(value){return({ORDER:"سفارش ثبت شد",DECIDING:"در حال تصمیم‌گیری",FOLLOW_UP:"نیاز به پیگیری",LOST:"خرید انجام نشد",NON_SALES:"تماس غیر فروش"})[value]||value}
+
+async function loadWorkspace(phone=""){
+  const data=await api(`/api/seller-v2/workspace${phone?`?phone=${encodeURIComponent(phone)}`:""}`);
+  const seller=data.seller,stats=data.stats,card=data.customer;
+  $("sidebarSellerName").textContent=seller.displayName;$("welcomeName").textContent=seller.displayName.split(" ")[0];
+  $("sidebarSellerExtension").textContent=`کارشناس فروش · داخلی ${seller.extensions.join(" و ")}`;
+  $("statOverdue").textContent=stats.overdue;$("statDue").textContent=stats.dueToday;$("statConversations").textContent=stats.conversations;
+  $("statPriced").textContent=stats.priced;$("statOrders").textContent=stats.orders;$("statLost").textContent=`${stats.lost} عدم خرید`;
+  $("missingResults").textContent=`${stats.missingResults} نتیجه ناقص`;
+  if(card){
+    currentCustomerPhone=card.callerNumber;currentCallLinkedId=card.linkedId;
+    $("customerName").textContent=card.companyName||card.customerName||"مشتری جدید";$("contactName").textContent=card.customerName||"نام ثبت نشده";
+    $("customerPhone").textContent=card.callerNumber;$("customerState").textContent=card.isKnownCustomer?"مشتری فعال":"مشتری جدید";
+    $("customerOwner").textContent=card.ownerName||"ثبت نشده";$("identitySource").textContent=card.identitySource||"نامشخص";
+    $("mainInterest").textContent=card.lastProduct||seller.productGroups.join("، ")||"ثبت نشده";$("customerCode").textContent=card.accountingCustomerCode||"ثبت نشده";
+    $("snapshotLastCall").textContent=relativeDate(card.lastCallAt);$("snapshotCallCount").textContent=`${(card.callsLast30Days||0).toLocaleString("fa-IR")} تماس در ۳۰ روز`;
+    $("snapshotLastPurchase").textContent=card.lastInvoiceDaysAgo==null?"—":card.lastInvoiceDaysAgo===0?"امروز":`${card.lastInvoiceDaysAgo.toLocaleString("fa-IR")} روز پیش`;
+    $("snapshotLastProduct").textContent=card.lastProduct||"بدون خرید ثبت‌شده";$("snapshotInvoices").textContent=(card.invoiceCount30Days||0).toLocaleString("fa-IR");
+    $("snapshotSales").textContent=money(card.sales30Days);
+    renderBalance(card.accountBalance,card.creditLimit);
+  }else{
+    $("customerName").textContent="آماده دریافت تماس";$("contactName").textContent="تماس جدید به‌صورت خودکار نمایش داده می‌شود";$("customerPhone").textContent="—";
+    renderBalance(null,null);
+  }
+  if(data.followUps.length){
+    $("followUpList").innerHTML=data.followUps.slice(0,5).map((x,index)=>`<article class="task ${new Date(x.dueAtUtc)<new Date()?"overdue":""}"><i></i><div><b>${esc(x.customerDisplayName)}</b><span>${esc(x.subject)}</span><small>${formatDate(x.dueAtUtc)}</small></div><button data-follow-id="${x.id}">›</button></article>`).join("");
+    $("completeTask").dataset.followId=data.followUps[0].id;
+    const next=data.followUps[0],due=new Date(next.dueAtUtc);$("nextActionCard").classList.remove("hidden");$("nextSubject").textContent=next.subject;$("nextCustomer").textContent=next.customerDisplayName;
+    $("nextDay").textContent=new Intl.DateTimeFormat("fa-IR",{month:"short",day:"numeric"}).format(due);$("nextTime").textContent=new Intl.DateTimeFormat("fa-IR",{hour:"2-digit",minute:"2-digit"}).format(due);$("nextStatus").textContent=due<new Date()?"عقب‌افتاده":"برنامه‌ریزی‌شده";
+  }else{$("followUpList").innerHTML='<div class="empty-list">پیگیری بازی ندارید.</div>';$("nextActionCard").classList.add("hidden")}
+  $("timeline").innerHTML=data.timeline.length?`<div class="day-label"><span>سابقه ثبت‌شده</span></div>`+data.timeline.map(x=>`<article class="timeline-item ${x.isMine?"mine":"others"}" data-kind="${x.outcome==="ORDER"?"orders":x.isMine?"mine":"others"}"><div class="timeline-icon ${x.eventType==="CALL"?"quote":x.outcome==="LOST"?"lost":x.outcome==="ORDER"?"order":"follow"}">${x.eventType==="CALL"?"☎":x.outcome==="ORDER"?"▣":x.outcome==="LOST"?"×":"↗"}</div><div class="timeline-content"><header><div><b>${esc(x.title||outcomeLabel(x.outcome)||"تماس تلفنی")}</b><span>${esc(x.sellerDisplayName)}</span></div><time>${formatDate(x.eventAtUtc)}</time></header><p>${esc(x.description||"بدون توضیح")}</p><div class="tag-row">${x.productName?`<span>${esc(x.productName)} ${esc(x.productSize||"")}</span>`:""}${x.lossReason?`<span class="red-tag">${esc(x.lossReason)}</span>`:""}</div></div></article>`).join(""):'<div class="empty-list">هنوز سابقه‌ای برای این مشتری ثبت نشده است.</div>';
+  $("accessGate").classList.add("hidden");
+  pollLiveCall();
+}
+
+document.querySelectorAll(".segmented-control button").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".segmented-control button").forEach(x=>x.classList.remove("active"));button.classList.add("active");
+  document.querySelectorAll(".timeline-item").forEach(item=>item.classList.toggle("hidden",button.dataset.filter!=="all"&&item.dataset.kind!==button.dataset.filter));
+}));
+document.querySelectorAll('input[name="outcome"]').forEach(input=>input.addEventListener("change",updateConditionalFields));
+document.querySelectorAll(".nav-item").forEach(button=>button.addEventListener("click",()=>{
+  document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));button.classList.add("active");
+  if(button.dataset.view!=="workspace")toast("این بخش در نسخه نمایشی بعدی تکمیل می‌شود");
+  document.querySelector(".sidebar").classList.remove("open");
+}));
+
+$("newInteraction").addEventListener("click",()=>openDrawer());
+$("closeDrawer").addEventListener("click",closeDrawer);
+$("drawerBackdrop").addEventListener("click",closeDrawer);
+$("nextStep").addEventListener("click",()=>setStep(step+1));
+$("prevStep").addEventListener("click",()=>setStep(step-1));
+$("saveInteraction").addEventListener("click",saveInteraction);
+$("simulateCall").addEventListener("click",startCall);
+$("endCall").addEventListener("click",endCall);
+$("menuButton").addEventListener("click",()=>document.querySelector(".sidebar").classList.toggle("open"));
+$("copyPhone").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(currentCustomerPhone);toast("شماره مشتری کپی شد")}catch{toast("امکان کپی شماره وجود ندارد")}});
+$("completeTask").addEventListener("click",async event=>{
+  const id=event.currentTarget.dataset.followId;
+  if(location.protocol!=="file:"&&id){
+    try{await api(`/api/seller-v2/follow-ups/${id}/complete`,{method:"POST",body:JSON.stringify({idempotencyKey:newId()})})}
+    catch(error){toast(error.message);return}
+  }
+  event.currentTarget.textContent="✓ تکمیل شد";event.currentTarget.disabled=true;toast("پیگیری با موفقیت انجام شد");
+});
+$("loadMore").addEventListener("click",event=>{event.currentTarget.textContent="تمام سوابق نمایش داده شده است";event.currentTarget.disabled=true});
+$("globalSearch").addEventListener("keydown",event=>{if(event.key==="Enter")toast(`جست‌وجو برای «${event.currentTarget.value||"همه مشتریان"}»`)});
+document.addEventListener("keydown",event=>{
+  if(event.key==="Escape")closeDrawer();
+  if(event.key==="/"&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){event.preventDefault();$("globalSearch").focus()}
+});
+
+$("accessForm").addEventListener("submit",async event=>{
+  event.preventDefault();$("accessError").textContent="";sellerToken=$("accessToken").value.trim();
+  try{await api("/api/seller-v2/session");sessionStorage.setItem("sellerV2Token",sellerToken);await loadWorkspace()}
+  catch(error){$("accessError").textContent=error.message==="UNAUTHORIZED"?"کد دسترسی معتبر نیست یا پایلوت فعال نشده است.":error.message}
+});
+
+setToday();updateConditionalFields();
+if(location.protocol!=="file:"){
+  $("simulateCall").classList.add("hidden");
+  if(sellerToken)loadWorkspace().catch(error=>{if(error.message!=="UNAUTHORIZED")toast("ارتباط با سرویس برقرار نشد")});
+  else $("accessGate").classList.remove("hidden");
+}else $("accessGate").classList.add("hidden");
+setInterval(pollLiveCall,2500);

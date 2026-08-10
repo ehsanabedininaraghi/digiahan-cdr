@@ -14,6 +14,7 @@ const string BuildDate = "2026-08-09";
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.RecordingIngestion.local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddJsonFile("appsettings.SellerWorkspace.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
     optional: true,
@@ -47,6 +48,9 @@ builder.Services.AddSingleton<DashboardRepository>();
 builder.Services.AddSingleton<AgentEventStore>();
 builder.Services.AddSingleton<CustomerIntelligenceRepository>();
 builder.Services.AddSingleton<AgentPanelRepository>();
+builder.Services.AddSingleton<SellerWorkspaceAccessService>();
+builder.Services.AddSingleton<SellerWorkspaceRepository>();
+builder.Services.AddHttpClient<LegacyAgentBridgeService>();
 builder.Services.AddSingleton<SalesDashboardRepository>();
 builder.Services.AddSingleton<AccountingSyncService>();
 builder.Services.AddSingleton<VoipIncidentLogger>();
@@ -71,7 +75,8 @@ builder.Services.AddSingleton<RecordingAudioValidator>();
 builder.Services.AddSingleton<FasterWhisperTranscriber>();
 builder.Services.AddSingleton<AiTranscriptAnalyzer>();
 builder.Services.AddSingleton<AiAnalysisRepository>();
-builder.Services.AddHostedService<IntegrationSchedulerWorker>();
+if (builder.Configuration.GetValue("IntegrationScheduler:Enabled", true))
+    builder.Services.AddHostedService<IntegrationSchedulerWorker>();
 builder.Services.AddHostedService<AiCallDiscoveryWorker>();
 builder.Services.AddHostedService<DailyRecordingIngestionWorker>();
 builder.Services.AddRateLimiter(options =>
@@ -154,6 +159,7 @@ app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
 app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
 app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
+app.MapGet("/seller-v2", () => Results.Redirect("/seller-v2/index.html"));
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
         ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
@@ -253,6 +259,20 @@ app.MapPost("/api/voip/events", async (
             });
         }
 
+        // Publish a minimal card before any database lookup. The legacy and V2
+        // workspaces can show the ringing call immediately, then receive the
+        // enriched card under the same LinkedId a moment later.
+        var fastCard = new AgentCustomerCard(
+            request.Extension.Trim(),
+            request.CallerNumber.Trim(),
+            request.EventTimeUtc ?? DateTime.UtcNow,
+            request.LinkedId,
+            null, null, null, null, false, null, 0, null, null,
+            null, null, null, 0, 0m, "C", "COLD",
+            "در حال دریافت اطلاعات مشتری…", null, "PENDING", "شناسایی سریع تماس", null, null);
+        var fastEnvelope = store.Put(request.Extension.Trim(), fastCard);
+        incidentLogger.Write(runId, "FAST_POPUP_PUBLISHED", new { fastEnvelope.Sequence, elapsedMs = 0 });
+
         AgentCustomerCard card;
         var mode = "FULL";
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -314,7 +334,9 @@ app.MapPost("/api/voip/events", async (
                     "مشتری جدید است؛ نام، شرکت و موضوع درخواست را ثبت کنید.",
                     null,
                     "EMERGENCY",
-                    "کارت اضطراری به دلیل خطای پایگاه داده ساخته شد");
+                    "کارت اضطراری به دلیل خطای پایگاه داده ساخته شد",
+                    null,
+                    null);
                 mode = "EMERGENCY";
             }
         }
@@ -412,6 +434,118 @@ app.MapGet("/api/agent/stats", async (
     AgentPanelRepository repository,
     CancellationToken ct) =>
     Results.Ok(await repository.Stats(extensions ?? "201", ct)));
+
+app.MapGet("/api/seller-v2/session", (
+    HttpContext context,
+    SellerWorkspaceAccessService access) =>
+{
+    var seller = access.Authenticate(context);
+    return seller is null
+        ? Results.Unauthorized()
+        : Results.Ok(new SellerSessionResponse(
+            seller.Key, seller.DisplayName, seller.Extensions, seller.ProductGroups));
+});
+
+app.MapGet("/api/seller-v2/current-call", async (
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    AgentEventStore events,
+    LegacyAgentBridgeService legacyBridge,
+    CancellationToken ct) =>
+{
+    var seller = access.Authenticate(context);
+    if (seller is null) return Results.Unauthorized();
+    var card = seller.Extensions
+        .Select(events.Get)
+        .Where(envelope => envelope is not null)
+        .Select(envelope => envelope!.Card)
+        .OrderByDescending(value => value.EventTimeUtc)
+        .FirstOrDefault();
+    card ??= await legacyBridge.GetCurrentAsync(seller, ct);
+    return card is null ? Results.NoContent() : Results.Ok(card);
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapGet("/api/seller-v2/workspace", async (
+    HttpContext context,
+    string? phone,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CustomerIntelligenceRepository customers,
+    AgentEventStore events,
+    LegacyAgentBridgeService legacyBridge,
+    CancellationToken ct) =>
+{
+    var seller = access.Authenticate(context);
+    if (seller is null) return Results.Unauthorized();
+
+    AgentCustomerCard? card;
+    if (!string.IsNullOrWhiteSpace(phone))
+    {
+        card = await customers.BuildCard(
+            new VoipRingEventRequest(seller.Extensions[0], phone, null, null, DateTime.UtcNow), ct);
+    }
+    else
+    {
+        card = seller.Extensions
+            .Select(events.Get)
+            .Where(envelope => envelope is not null)
+            .Select(envelope => envelope!.Card)
+            .OrderByDescending(value => value.EventTimeUtc)
+            .FirstOrDefault();
+        card ??= await legacyBridge.GetCurrentAsync(seller, ct);
+    }
+
+    var statsTask = workspace.GetStatsAsync(seller, ct);
+    var followUpsTask = workspace.GetFollowUpsAsync(seller, 20, ct);
+    var timelineTask = card is null
+        ? Task.FromResult<IReadOnlyList<SellerTimelineRow>>(Array.Empty<SellerTimelineRow>())
+        : workspace.GetTimelineAsync(seller, card.CallerNumber, 50, ct);
+    await Task.WhenAll(statsTask, followUpsTask, timelineTask);
+
+    return Results.Ok(new SellerWorkspaceResponse(
+        new SellerSessionResponse(seller.Key, seller.DisplayName, seller.Extensions, seller.ProductGroups),
+        card,
+        await statsTask,
+        await followUpsTask,
+        await timelineTask,
+        DateTime.UtcNow));
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapPost("/api/seller-v2/interactions", async (
+    HttpContext context,
+    SellerInteractionRequest request,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = access.Authenticate(context);
+    if (seller is null) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(await workspace.SaveInteractionAsync(seller, request, ct));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/seller-v2/follow-ups/{id:long}/complete", async (
+    HttpContext context,
+    long id,
+    SellerFollowUpCompleteRequest request,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = access.Authenticate(context);
+    if (seller is null) return Results.Unauthorized();
+    if (!Guid.TryParse(request.IdempotencyKey, out var key))
+        return Results.BadRequest(new { error = "IdempotencyKey is invalid." });
+    return await workspace.CompleteFollowUpAsync(seller, id, key, ct)
+        ? Results.Ok(new { id, status = "COMPLETED" })
+        : Results.NotFound();
+});
 app.MapGet("/api/dashboard/summary", async (DateTime? startDate, DateTime? endDate, string? extension, DashboardRepository repo, CancellationToken ct) =>
 {
     var (start, end) = ResolveRange(startDate, endDate);

@@ -156,7 +156,7 @@ try {
     $dataConfig.DataGathering | Add-Member -MemberType NoteProperty -Name AccountingDays -Value 2 -Force
     $dataConfig.DataGathering | Add-Member -MemberType NoteProperty -Name UnmappedAlertHours -Value 24 -Force
     $dataConfig.DataGathering | Add-Member -MemberType NoteProperty -Name MappingFile -Value "config/mappingfile.xlsx" -Force
-    $dataConfig.DataGathering | Add-Member -MemberType NoteProperty -Name AccountingBridgeScript -Value "tools/accounting-bridge-v4.3.4.ps1" -Force
+    $dataConfig.DataGathering | Add-Member -MemberType NoteProperty -Name AccountingBridgeScript -Value "tools/accounting-bridge-v4.3.8.ps1" -Force
     $dataConfig | Add-Member -MemberType NoteProperty -Name InvoiceNotifications -Value ([pscustomobject]@{
         PublicOrderBaseUrl = "https://www.digiahan.com/order"
         TokenExpiryDays = 7
