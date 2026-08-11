@@ -140,9 +140,9 @@ public sealed class CustomerIntelligenceRepository
                 ORDER BY IsVerified DESC,Priority,Id
             )
             SELECT
-                COALESCE(NULLIF(d.FullName,N''),NULLIF(i.DisplayName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
-                COALESCE(NULLIF(d.CompanyName,N''),NULLIF(i.CompanyName,N''),NULLIF(a.CustomerName,N'')),
-                COALESCE(NULLIF(d.OwnerName,N''),NULLIF(i.OwnerName,N'')),
+                COALESCE(NULLIF(i.DisplayName,N''),NULLIF(d.FullName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
+                COALESCE(NULLIF(i.CompanyName,N''),NULLIF(d.CompanyName,N''),NULLIF(a.CustomerName,N'')),
+                COALESCE(NULLIF(i.OwnerName,N''),NULLIF(d.OwnerName,N'')),
                 d.DidarContactCode,a.DetailCode,p.SourceSystem,p.IsVerified
             FROM MatchedPhone p
             INNER JOIN dbo.CustomerIdentities i ON i.IdentityId=p.IdentityId
@@ -242,9 +242,9 @@ public sealed class CustomerIntelligenceRepository
         )
         SELECT
             p.IdentityId,
-            COALESCE(NULLIF(d.FullName,N''),NULLIF(i.DisplayName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
-            COALESCE(NULLIF(d.CompanyName,N''),NULLIF(i.CompanyName,N''),NULLIF(a.CustomerName,N'')),
-            COALESCE(NULLIF(d.OwnerName,N''),NULLIF(i.OwnerName,N'')),
+            COALESCE(NULLIF(i.DisplayName,N''),NULLIF(d.FullName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')),
+            COALESCE(NULLIF(i.CompanyName,N''),NULLIF(d.CompanyName,N''),NULLIF(a.CustomerName,N'')),
+            COALESCE(NULLIF(i.OwnerName,N''),NULLIF(d.OwnerName,N'')),
             d.DidarContactCode,a.SourceDatabase,a.FiscalYear,a.DetailCode,a.ShortCode,
             p.SourceSystem,p.IsVerified
         FROM MatchedPhone p

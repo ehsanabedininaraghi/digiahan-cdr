@@ -37,4 +37,5 @@ public sealed record AgentCustomerCard(
 
 public sealed record AgentEventEnvelope(
     long Sequence,
+    DateTime PublishedAtUtc,
     AgentCustomerCard Card);

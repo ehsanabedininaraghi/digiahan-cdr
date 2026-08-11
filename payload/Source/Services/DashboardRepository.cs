@@ -36,7 +36,7 @@ public sealed class DashboardRepository
             GetInt(reader, "T"), GetInt(reader, "A"), GetInt(reader, "M"),
             GetInt(reader, "I"), GetInt(reader, "O"), GetInt(reader, "B"),
             GetInt(reader, "Av"), GetInt(reader, "KnownCustomers"),
-            GetInt(reader, "NewCustomers"), GetDateTime(reader, "L"), GetDateTime(reader, "R"));
+            GetInt(reader, "NewCustomers"), GetUtcDateTime(reader, "L"), GetUtcDateTime(reader, "R"));
     }
 
     public async Task<IReadOnlyList<HourlyPoint>> Hourly(
@@ -131,7 +131,7 @@ public sealed class DashboardRepository
             {
                 items.Add(new CallRow(
                     GetLong(reader, "RawCDRId"),
-                    GetDateTime(reader, "Calldate"),
+                    GetUtcDateTime(reader, "Calldate"),
                     GetString(reader, "Src"),
                     GetString(reader, "Dst"),
                     GetString(reader, "Direction") ?? "unknown",
@@ -178,8 +178,8 @@ public sealed class DashboardRepository
         await reader.NextResultAsync(ct);
         if (await reader.ReadAsync(ct))
         {
-            lastReceived = reader.IsDBNull(0) ? null : reader.GetDateTime(0);
-            lastCdr = reader.IsDBNull(1) ? null : reader.GetDateTime(1);
+            lastReceived = reader.IsDBNull(0) ? null : TehranClock.AsUtc(reader.GetDateTime(0));
+            lastCdr = reader.IsDBNull(1) ? null : TehranClock.AsUtc(reader.GetDateTime(1));
             rowsLastHour = reader.IsDBNull(2) ? 0 : Convert.ToInt32(reader[2]);
         }
 
@@ -207,8 +207,8 @@ public sealed class DashboardRepository
         var rows = new List<SellerPerformanceRow>();
         await using var connection = await OpenConnection(ct);
         await using var command = new SqlCommand(sql, connection) { CommandTimeout = 30 };
-        command.Parameters.Add("@s", SqlDbType.DateTime2).Value = startDate.Date;
-        command.Parameters.Add("@e", SqlDbType.DateTime2).Value = endDate.Date.AddDays(1);
+        command.Parameters.Add("@s", SqlDbType.DateTime2).Value = TehranClock.ToUtc(startDate.Date);
+        command.Parameters.Add("@e", SqlDbType.DateTime2).Value = TehranClock.ToUtc(endDate.Date.AddDays(1));
         command.Parameters.Add("@ext", SqlDbType.NVarChar, 20).Value =
             string.IsNullOrWhiteSpace(extension) ? "all" : extension.Trim();
         await using var reader = await ExecuteReader(command, "SellerPerformance", ct);
@@ -277,8 +277,8 @@ public sealed class DashboardRepository
     private static void AddRangeParameters(
         SqlCommand command, DateTime startDate, DateTime endDate, string? extension)
     {
-        var start = startDate.Date;
-        var endExclusive = endDate.Date.AddDays(1);
+        var start = TehranClock.ToUtc(startDate.Date);
+        var endExclusive = TehranClock.ToUtc(endDate.Date.AddDays(1));
 
         command.Parameters.Add("@s", SqlDbType.DateTime2).Value = start;
         command.Parameters.Add("@e", SqlDbType.DateTime2).Value = endExclusive;
@@ -307,6 +307,9 @@ public sealed class DashboardRepository
 
     private static DateTime? GetDateTime(SqlDataReader reader, string name)
         => reader.IsDBNull(reader.GetOrdinal(name)) ? null : reader.GetDateTime(reader.GetOrdinal(name));
+
+    private static DateTime? GetUtcDateTime(SqlDataReader reader, string name)
+        => reader.IsDBNull(reader.GetOrdinal(name)) ? null : TehranClock.AsUtc(reader.GetDateTime(reader.GetOrdinal(name)));
 
     private static string? GetString(SqlDataReader reader, string name)
         => reader.IsDBNull(reader.GetOrdinal(name)) ? null : Convert.ToString(reader[name]);

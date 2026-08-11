@@ -19,4 +19,15 @@ if (PublicTokenService.Hash(tokenA).SequenceEqual(PublicTokenService.Hash(tokenB
     throw new InvalidOperationException("Different tokens must not have the same hash.");
 
 Equal("09121234567", MappingValueNormalizer.Phone("+98 912 123 4567"), "Iran mobile normalization");
-Console.WriteLine("v4.3.8 smoke tests passed.");
+
+var localLookingTimestamp = DateTime.UtcNow.AddMinutes(210).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+var normalizedTimestamp = TehranClock.NormalizeIncomingEventUtc(localLookingTimestamp);
+if (Math.Abs((normalizedTimestamp - DateTime.UtcNow).TotalMinutes) > 2)
+    throw new InvalidOperationException("Tehran-local event timestamp was not normalized to UTC.");
+
+var explicitUtc = DateTime.UtcNow.AddMinutes(-1);
+var normalizedUtc = TehranClock.NormalizeIncomingEventUtc(explicitUtc.ToString("O"));
+if (Math.Abs((normalizedUtc - explicitUtc).TotalSeconds) > 2)
+    throw new InvalidOperationException("Explicit UTC timestamp changed during normalization.");
+
+Console.WriteLine("v4.3.10 smoke tests passed.");

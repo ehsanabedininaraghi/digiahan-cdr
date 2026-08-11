@@ -1,10 +1,11 @@
 ﻿WITH Raw AS
 (
     SELECT
-        r.*,
+        r.RawCDRId,r.LinkedId,r.UniqueId,r.ReceivedAtUtc,r.Disposition,r.Billsec,
+        r.Src,r.Dst,r.Did,r.Dcontext,
         K=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
     FROM dbo.RawCDR r
-    WHERE r.Calldate>=@s AND r.Calldate<@e
+    WHERE r.ReceivedAtUtc>=@s AND r.ReceivedAtUtc<@e
 ),
 EligibleKeys AS
 (
@@ -15,7 +16,7 @@ EligibleKeys AS
 C AS
 (
     SELECT
-        r.K,r.Calldate,r.ReceivedAtUtc,r.Disposition,r.Billsec,
+        r.K,r.ReceivedAtUtc AS Calldate,r.ReceivedAtUtc,r.Disposition,r.Billsec,
         Dir=CASE
             WHEN NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%' THEN N'in'
             WHEN r.Dcontext LIKE N'%from-internal%' OR r.Dcontext LIKE N'%outbound%' THEN N'out'
@@ -46,20 +47,25 @@ O AS
     FROM C
     GROUP BY K
 ),
-R AS
+N AS
 (
     SELECT
         O.*,
-        NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone),
-        HasContact=CASE WHEN M.IdentityId IS NULL THEN 0 ELSE 1 END
+        NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
     FROM O
-    OUTER APPLY
+),
+R AS
+(
+    SELECT
+        N.*,
+        HasContact=CASE WHEN P.NormalizedPhone IS NULL THEN 0 ELSE 1 END
+    FROM N
+    LEFT JOIN
     (
-        SELECT TOP(1) IdentityId,IsVerified
-        FROM dbo.CustomerPhoneDirectory
-        WHERE NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
-        ORDER BY IsVerified DESC,IdentityId
-    ) M
+        SELECT NormalizedPhone
+        FROM dbo.CustomerIdentityPhones
+        GROUP BY NormalizedPhone
+    ) P ON P.NormalizedPhone=N.NormalizedPhone
 )
 SELECT
     COUNT(*) AS T,
@@ -73,4 +79,5 @@ SELECT
     COUNT(DISTINCT CASE WHEN NormalizedPhone IS NOT NULL AND HasContact=0 THEN NormalizedPhone END) AS NewCustomers,
     MAX(Calldate) AS L,
     MAX(ReceivedAtUtc) AS R
-FROM R;
+FROM R
+OPTION(RECOMPILE);

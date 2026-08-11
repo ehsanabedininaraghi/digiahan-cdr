@@ -4,17 +4,20 @@ using DigiAhan.CDR.Receiver.Services;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.8";
-const string BuildDate = "2026-08-09";
+const string AppVersion = "4.3.10";
+const string BuildDate = "2026-08-11";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.RecordingIngestion.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.SellerWorkspace.local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddJsonFile("appsettings.Dashboard.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
     optional: true,
@@ -92,6 +95,26 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("dashboard-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("seller-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -130,6 +153,35 @@ app.Use(async (context, next) =>
     }
 });
 
+app.Use(async (context, next) =>
+{
+    if (!RequiresDashboardAuthentication(context.Request.Path))
+    {
+        await next();
+        return;
+    }
+
+    var supplied = context.Request.Cookies["digiahan_dashboard_auth"];
+    var expected = DashboardCookieValue(context.RequestServices.GetRequiredService<IConfiguration>());
+    if (!string.IsNullOrWhiteSpace(expected)
+        && !string.IsNullOrWhiteSpace(supplied)
+        && TokenComparer.FixedTimeEquals(expected, supplied))
+    {
+        await next();
+        return;
+    }
+
+    if (context.Request.Path.StartsWithSegments("/dashboard")
+        || context.Request.Path.StartsWithSegments("/ai"))
+    {
+        context.Response.Redirect("/dashboard-login");
+        return;
+    }
+
+    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+    await context.Response.WriteAsJsonAsync(new { error = "ورود به داشبورد مدیریت لازم است." });
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseOutputCache();
@@ -156,6 +208,33 @@ app.MapGet("/health", async (SqlCdrRepository repository, CancellationToken ct) 
 });
 
 app.MapGet("/dashboard", () => Results.Redirect("/dashboard/index.html"));
+app.MapGet("/dashboard-login", () => Results.Redirect("/dashboard-login/index.html"));
+app.MapPost("/api/dashboard-auth/login", async (HttpContext context, IConfiguration configuration) =>
+{
+    var input = await context.Request.ReadFromJsonAsync<Dictionary<string, string>>();
+    var password = input is not null && input.TryGetValue("password", out var value) ? value : null;
+    var configuredHash = DashboardPasswordHash(configuration);
+    if (string.IsNullOrWhiteSpace(configuredHash))
+        return Results.Json(new { error = "رمز داشبورد هنوز تنظیم نشده است." }, statusCode: 503);
+    var suppliedHash = HashDashboardSecret(password ?? string.Empty);
+    if (!TokenComparer.FixedTimeEquals(configuredHash, suppliedHash))
+        return Results.Json(new { error = "رمز واردشده صحیح نیست." }, statusCode: 401);
+
+    context.Response.Cookies.Append("digiahan_dashboard_auth", DashboardCookieValue(configuration), new CookieOptions
+    {
+        HttpOnly = true,
+        SameSite = SameSiteMode.Strict,
+        Secure = context.Request.IsHttps,
+        IsEssential = true,
+        Path = "/"
+    });
+    return Results.Ok(new { authenticated = true });
+}).RequireRateLimiting("dashboard-login");
+app.MapGet("/api/dashboard-auth/logout", (HttpContext context) =>
+{
+    context.Response.Cookies.Delete("digiahan_dashboard_auth", new CookieOptions { Path = "/" });
+    return Results.Redirect("/dashboard-login");
+});
 app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
 app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
@@ -225,7 +304,7 @@ app.MapPost("/api/voip/events", async (
             var linkedId = ReadString(root, "linkedId", "linkedid", "uniqueId");
             var channel = ReadString(root, "channel");
             var eventText = ReadString(root, "eventTimeUtc", "eventTime", "utc");
-            DateTime? eventTime = DateTime.TryParse(eventText, out var parsed) ? parsed : null;
+            var eventTime = TehranClock.NormalizeIncomingEventUtc(eventText);
 
             if (string.IsNullOrWhiteSpace(extension) || string.IsNullOrWhiteSpace(caller))
             {
@@ -435,11 +514,43 @@ app.MapGet("/api/agent/stats", async (
     CancellationToken ct) =>
     Results.Ok(await repository.Stats(extensions ?? "201", ct)));
 
-app.MapGet("/api/seller-v2/session", (
+app.MapPost("/api/seller-v2/login", async (
+    SellerLoginRequest request,
     HttpContext context,
-    SellerWorkspaceAccessService access) =>
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
 {
-    var seller = access.Authenticate(context);
+    var login = await access.LoginAsync(request.Username, request.Password, ct);
+    if (login is null) return Results.Unauthorized();
+    context.Response.Cookies.Append("digiahan_seller_session", login.AccessToken, new CookieOptions
+    {
+        HttpOnly = true,
+        SameSite = SameSiteMode.Strict,
+        Secure = context.Request.IsHttps,
+        IsEssential = true,
+        Path = "/",
+        Expires = new DateTimeOffset(login.ExpiresAtUtc)
+    });
+    return Results.Ok(new SellerSessionResponse(login.Seller.Key, login.Seller.DisplayName,
+        login.Seller.Extensions, login.Seller.ProductGroups));
+}).RequireRateLimiting("seller-login");
+
+app.MapPost("/api/seller-v2/logout", async (
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
+{
+    await access.LogoutAsync(context, ct);
+    context.Response.Cookies.Delete("digiahan_seller_session", new CookieOptions { Path = "/" });
+    return Results.Ok(new { loggedOut = true });
+});
+
+app.MapGet("/api/seller-v2/session", async (
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
     return seller is null
         ? Results.Unauthorized()
         : Results.Ok(new SellerSessionResponse(
@@ -451,32 +562,47 @@ app.MapGet("/api/seller-v2/current-call", async (
     SellerWorkspaceAccessService access,
     AgentEventStore events,
     LegacyAgentBridgeService legacyBridge,
+    AgentPanelRepository panelRepository,
     CancellationToken ct) =>
 {
-    var seller = access.Authenticate(context);
+    var seller = await access.AuthenticateAsync(context, ct);
     if (seller is null) return Results.Unauthorized();
-    var card = seller.Extensions
+    var envelope = seller.Extensions
         .Select(events.Get)
         .Where(envelope => envelope is not null)
-        .Select(envelope => envelope!.Card)
-        .OrderByDescending(value => value.EventTimeUtc)
+        .Select(value => value!)
+        .Where(value => value.PublishedAtUtc >= DateTime.UtcNow.AddMinutes(-10))
+        .OrderByDescending(value => value.PublishedAtUtc)
         .FirstOrDefault();
-    card ??= await legacyBridge.GetCurrentAsync(seller, ct);
-    return card is null ? Results.NoContent() : Results.Ok(card);
+    var card = envelope?.Card ?? await legacyBridge.GetCurrentAsync(seller, ct);
+    AgentIncomingEventRow? persisted = null;
+    if (card is null)
+    {
+        persisted = (await panelRepository.RecentIncoming(string.Join(',', seller.Extensions), 1, ct))
+            .FirstOrDefault(row => TehranClock.AsUtc(row.CreatedAtUtc) >= DateTime.UtcNow.AddMinutes(-10));
+        card = persisted is null ? null : CardFromIncoming(persisted);
+    }
+    if (card is null) return Results.NoContent();
+    return Results.Ok(new SellerCurrentCallResponse(card,
+        envelope?.PublishedAtUtc ?? TehranClock.AsUtc(persisted?.CreatedAtUtc ?? card.EventTimeUtc), DateTime.UtcNow));
 }).CacheOutput(policy => policy.NoCache());
 
 app.MapGet("/api/seller-v2/workspace", async (
     HttpContext context,
     string? phone,
+    bool? readOnly,
     SellerWorkspaceAccessService access,
     SellerWorkspaceRepository workspace,
     CustomerIntelligenceRepository customers,
     AgentEventStore events,
     LegacyAgentBridgeService legacyBridge,
+    AgentPanelRepository panelRepository,
     CancellationToken ct) =>
 {
-    var seller = access.Authenticate(context);
+    var seller = await access.AuthenticateAsync(context, ct);
     if (seller is null) return Results.Unauthorized();
+
+    var readOnlyCustomer = readOnly == true;
 
     AgentCustomerCard? card;
     if (!string.IsNullOrWhiteSpace(phone))
@@ -493,6 +619,12 @@ app.MapGet("/api/seller-v2/workspace", async (
             .OrderByDescending(value => value.EventTimeUtc)
             .FirstOrDefault();
         card ??= await legacyBridge.GetCurrentAsync(seller, ct);
+        if (card is null)
+        {
+            var persisted = (await panelRepository.RecentIncoming(string.Join(',', seller.Extensions), 1, ct))
+                .FirstOrDefault(row => TehranClock.AsUtc(row.CreatedAtUtc) >= DateTime.UtcNow.AddMinutes(-10));
+            card = persisted is null ? null : CardFromIncoming(persisted);
+        }
     }
 
     var statsTask = workspace.GetStatsAsync(seller, ct);
@@ -508,7 +640,84 @@ app.MapGet("/api/seller-v2/workspace", async (
         await statsTask,
         await followUpsTask,
         await timelineTask,
+        readOnlyCustomer,
         DateTime.UtcNow));
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapGet("/api/seller-v2/customers/search", async (
+    HttpContext context,
+    string? q,
+    int? take,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    return Results.Ok(await workspace.SearchCustomersAsync(q, take ?? 20, ct));
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapGet("/api/seller-v2/customers/profile", async (
+    HttpContext context,
+    string? phone,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    return Results.Ok(await workspace.GetCustomerProfileAsync(phone, ct));
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapPost("/api/seller-v2/customers", async (
+    HttpContext context,
+    SellerCustomerSaveRequest request,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspace.SaveCustomerAsync(seller, null, request, true, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+});
+
+app.MapPut("/api/seller-v2/customers/by-phone/{phone}", async (
+    string phone,
+    HttpContext context,
+    SellerCustomerSaveRequest request,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspace.SaveCustomerAsync(seller, phone, request, false, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+});
+
+app.MapDelete("/api/seller-v2/customers/by-phone/{phone}", async (
+    string phone,
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    return await workspace.ArchiveCustomerAsync(seller, phone, ct) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapGet("/api/seller-v2/missing-results", async (
+    HttpContext context,
+    int? take,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    return Results.Ok(await workspace.GetMissingResultsAsync(seller, take ?? 30, ct));
 }).CacheOutput(policy => policy.NoCache());
 
 app.MapPost("/api/seller-v2/interactions", async (
@@ -518,7 +727,7 @@ app.MapPost("/api/seller-v2/interactions", async (
     SellerWorkspaceRepository workspace,
     CancellationToken ct) =>
 {
-    var seller = access.Authenticate(context);
+    var seller = await access.AuthenticateAsync(context, ct);
     if (seller is null) return Results.Unauthorized();
     try
     {
@@ -538,7 +747,7 @@ app.MapPost("/api/seller-v2/follow-ups/{id:long}/complete", async (
     SellerWorkspaceRepository workspace,
     CancellationToken ct) =>
 {
-    var seller = access.Authenticate(context);
+    var seller = await access.AuthenticateAsync(context, ct);
     if (seller is null) return Results.Unauthorized();
     if (!Guid.TryParse(request.IdempotencyKey, out var key))
         return Results.BadRequest(new { error = "IdempotencyKey is invalid." });
@@ -1069,6 +1278,35 @@ static bool CanWriteInternalData(HttpContext context, IConfiguration configurati
         && TokenComparer.FixedTimeEquals(expected, supplied);
 }
 
+static AgentCustomerCard CardFromIncoming(AgentIncomingEventRow row)
+    => new(
+        row.Extension,
+        row.CallerNumber,
+        TehranClock.AsUtc(row.EventTimeUtc),
+        row.LinkedId,
+        row.CustomerName,
+        row.CompanyName,
+        row.OwnerName,
+        null,
+        row.IsKnownCustomer,
+        null,
+        0,
+        null,
+        null,
+        row.LastInvoiceDate,
+        row.LastInvoiceAmount,
+        row.LastProduct,
+        0,
+        row.Sales30Days,
+        row.CustomerRank,
+        row.Temperature,
+        row.IsKnownCustomer ? "تماس ورودی مشتری ثبت‌شده" : "تماس ورودی مشتری جدید",
+        null,
+        "PERSISTED_AGENT_EVENT",
+        "بازیابی‌شده از آخرین تماس ثبت‌شده",
+        null,
+        null);
+
 static bool CanReadInternalData(HttpContext context, IConfiguration configuration)
 {
     if (CanWriteInternalData(context, configuration)) return true;
@@ -1081,6 +1319,34 @@ static bool CanReadInternalData(HttpContext context, IConfiguration configuratio
            || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
            || (bytes[0] == 192 && bytes[1] == 168);
 }
+
+static bool RequiresDashboardAuthentication(PathString path)
+    => path.StartsWithSegments("/dashboard")
+       || path.StartsWithSegments("/ai")
+       || path.StartsWithSegments("/api/dashboard")
+       || path.StartsWithSegments("/api/ai")
+       || path.StartsWithSegments("/api/sales");
+
+static string? DashboardPasswordHash(IConfiguration configuration)
+{
+    var configuredHash = configuration["DashboardAccess:PasswordHash"]?.Trim();
+    if (!string.IsNullOrWhiteSpace(configuredHash)
+        && !configuredHash.StartsWith("CHANGE_", StringComparison.OrdinalIgnoreCase))
+        return configuredHash.ToUpperInvariant();
+    var fallback = configuration["Receiver:ApiToken"];
+    return string.IsNullOrWhiteSpace(fallback) ? null : HashDashboardSecret(fallback);
+}
+
+static string DashboardCookieValue(IConfiguration configuration)
+{
+    var passwordHash = DashboardPasswordHash(configuration);
+    return string.IsNullOrWhiteSpace(passwordHash)
+        ? string.Empty
+        : HashDashboardSecret($"DigiAhan-Dashboard-Session|{passwordHash}");
+}
+
+static string HashDashboardSecret(string value)
+    => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
 
 try

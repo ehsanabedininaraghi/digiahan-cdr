@@ -4,9 +4,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <Version>4.3.8</Version>
-    <AssemblyVersion>4.3.8.0</AssemblyVersion>
-    <FileVersion>4.3.8.0</FileVersion>
+    <Version>4.3.10</Version>
+    <AssemblyVersion>4.3.10.0</AssemblyVersion>
+    <FileVersion>4.3.10.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,12 +25,4 @@
     </Content>
   </ItemGroup>
 
-  <!-- Seller V2 stays isolated from the legacy /agent UI while it is piloted. -->
-  <ItemGroup>
-    <Content Include="..\payload\Source\wwwroot\seller-v2\**\*"
-             Link="wwwroot\seller-v2\%(RecursiveDir)%(Filename)%(Extension)">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
 </Project>

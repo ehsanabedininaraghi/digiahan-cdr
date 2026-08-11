@@ -4,9 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>داشبورد تماس دیجی‌آهن</title>
-<link rel="stylesheet" href="style.css?v=438">
+<link rel="stylesheet" href="style.css?v=4310">
 </head>
 <body>
+<div id="reportProgress" class="report-progress hidden" role="status" aria-live="polite">
+  <div class="report-progress-card">
+    <span class="report-spinner" aria-hidden="true"></span>
+    <div><b id="reportProgressText">در حال آماده‌سازی گزارش…</b><small id="reportProgressPercent">۰٪</small></div>
+    <div class="report-progress-track"><i id="reportProgressBar"></i></div>
+  </div>
+</div>
 <div class="shell">
 <aside>
   <div class="brand"><img class="brand-logo" src="assets/digiahan-logo.png" alt="لوگوی دیجی‌آهن"><div class="brand-title"><b>دیجی‌آهن</b><small>مدیریت تماس‌ها</small></div></div>
@@ -16,7 +23,8 @@
 </aside>
 <main>
 <header>
-  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v4.3.8</span></h1><p>گزارش تماس‌ها، مشتریان، فروش و سلامت اتصال‌ها</p></div>
+  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v4.3.10</span></h1><p>گزارش تماس‌ها، مشتریان، فروش و سلامت اتصال‌ها</p></div>
+  <a href="/api/dashboard-auth/logout">خروج</a>
 </header>
 
 <section class="panel filter-panel">
@@ -130,10 +138,10 @@
 <div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>کل</th><th>پاسخ</th><th>بی‌پاسخ</th><th>ورودی</th><th>خروجی</th><th>مشتری جدید</th><th>شناخته‌شده</th><th>مکالمه</th></tr></thead><tbody id="dailyRows"></tbody></table></div>
 </section>
 
-<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v4.3.8</span></footer>
+<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v4.3.10</span></footer>
 </main>
 </div>
 <div id="toast"></div>
-<script src="app.js?v=438"></script>
+<script src="app.js?v=4310"></script>
 </body>
 </html>

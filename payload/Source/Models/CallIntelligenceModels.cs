@@ -31,8 +31,11 @@ public sealed record AgentCustomerCard(
     string SuggestedOpening,
     int? LastInvoiceDaysAgo,
     string IdentitySource,
-    string CustomerRankReason);
+    string CustomerRankReason,
+    decimal? AccountBalance,
+    decimal? CreditLimit);
 
 public sealed record AgentEventEnvelope(
     long Sequence,
+    DateTime PublishedAtUtc,
     AgentCustomerCard Card);

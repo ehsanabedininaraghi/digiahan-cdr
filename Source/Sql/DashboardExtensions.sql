@@ -11,7 +11,7 @@
         Disposition,
         Billsec
     FROM dbo.RawCDR
-    WHERE Calldate>=@s AND Calldate<@e
+    WHERE ReceivedAtUtc>=@s AND ReceivedAtUtc<@e
 ),
 O AS
 (
@@ -36,4 +36,5 @@ SELECT TOP(100)
     CASE WHEN SUM(A)>0 THEN SUM(B)/SUM(A) ELSE 0 END Av
 FROM O
 GROUP BY E
-ORDER BY T DESC,E;
+ORDER BY T DESC,E
+OPTION(RECOMPILE);
