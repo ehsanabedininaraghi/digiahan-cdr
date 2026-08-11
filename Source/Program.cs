@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.10";
+const string AppVersion = "4.3.11";
 const string BuildDate = "2026-08-11";
 
 var builder = WebApplication.CreateBuilder(args);
@@ -239,6 +239,7 @@ app.MapGet("/ai", () => Results.Redirect("/ai/index.html"));
 app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notifications/index.html"));
 app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
 app.MapGet("/seller-v2", () => Results.Redirect("/seller-v2/index.html"));
+app.MapGet("/seller-admin", () => Results.Redirect("/seller-admin/index.html"));
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
         ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
@@ -555,6 +556,60 @@ app.MapGet("/api/seller-v2/session", async (
         ? Results.Unauthorized()
         : Results.Ok(new SellerSessionResponse(
             seller.Key, seller.DisplayName, seller.Extensions, seller.ProductGroups));
+});
+
+app.MapGet("/api/seller-admin/users", async (
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) => Results.Ok(await access.ListUsersAsync(ct)));
+
+app.MapPost("/api/seller-admin/users", async (
+    SellerAdminUserSaveRequest request,
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await access.CreateUserAsync(request, ct));
+    }
+    catch (Exception error) when (error is ArgumentException or InvalidOperationException)
+    {
+        return SellerAdminError(error);
+    }
+});
+
+app.MapPut("/api/seller-admin/users/{id:long}", async (
+    long id,
+    SellerAdminUserSaveRequest request,
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var result = await access.UpdateUserAsync(id, request, ct);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (Exception error) when (error is ArgumentException or InvalidOperationException)
+    {
+        return SellerAdminError(error);
+    }
+});
+
+app.MapPost("/api/seller-admin/users/{id:long}/reset-password", async (
+    long id,
+    SellerAdminPasswordResetRequest request,
+    SellerWorkspaceAccessService access,
+    CancellationToken ct) =>
+{
+    try
+    {
+        return await access.ResetPasswordAsync(id, request.NewPassword, ct)
+            ? Results.Ok(new { id, passwordReset = true })
+            : Results.NotFound();
+    }
+    catch (ArgumentException error)
+    {
+        return SellerAdminError(error);
+    }
 });
 
 app.MapGet("/api/seller-v2/current-call", async (
@@ -1323,9 +1378,31 @@ static bool CanReadInternalData(HttpContext context, IConfiguration configuratio
 static bool RequiresDashboardAuthentication(PathString path)
     => path.StartsWithSegments("/dashboard")
        || path.StartsWithSegments("/ai")
+       || path.StartsWithSegments("/seller-admin")
        || path.StartsWithSegments("/api/dashboard")
        || path.StartsWithSegments("/api/ai")
+       || path.StartsWithSegments("/api/seller-admin")
        || path.StartsWithSegments("/api/sales");
+
+static IResult SellerAdminError(Exception exception)
+{
+    var code = exception.Message;
+    var message = code switch
+    {
+        "USERNAME_INVALID" => "نام کاربری باید ۳ تا ۸۰ کاراکتر و بدون فاصله باشد.",
+        "SELLER_KEY_INVALID" => "شناسه فروشنده باید لاتین و بدون فاصله باشد.",
+        "DISPLAY_NAME_INVALID" => "نام فروشنده معتبر نیست.",
+        "PASSWORD_REQUIRED" => "برای کاربر جدید رمز عبور لازم است.",
+        "PASSWORD_INVALID" => "رمز عبور باید حداقل ۸ کاراکتر باشد.",
+        "EXTENSION_REQUIRED" => "حداقل یک داخلی معتبر لازم است.",
+        "USERNAME_EXISTS" => "این نام کاربری قبلاً استفاده شده است.",
+        "SELLER_KEY_EXISTS" => "این شناسه فروشنده قبلاً استفاده شده است.",
+        _ => "اطلاعات کاربر فروش معتبر نیست."
+    };
+    return code is "USERNAME_EXISTS" or "SELLER_KEY_EXISTS"
+        ? Results.Conflict(new { error = message, code })
+        : Results.BadRequest(new { error = message, code });
+}
 
 static string? DashboardPasswordHash(IConfiguration configuration)
 {

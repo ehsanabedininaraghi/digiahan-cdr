@@ -99,6 +99,30 @@ public sealed record SellerWorkspaceResponse(
 
 public sealed record SellerLoginRequest(string Username, string Password);
 
+public sealed record SellerAdminUserRow(
+    long Id,
+    string Username,
+    string SellerKey,
+    string DisplayName,
+    bool IsActive,
+    IReadOnlyList<string> Extensions,
+    IReadOnlyList<string> ProductGroups,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc,
+    DateTime? LastLoginAtUtc,
+    int ActiveSessions);
+
+public sealed record SellerAdminUserSaveRequest(
+    string Username,
+    string SellerKey,
+    string DisplayName,
+    string? Password,
+    bool IsActive,
+    IReadOnlyList<string>? Extensions,
+    IReadOnlyList<string>? ProductGroups);
+
+public sealed record SellerAdminPasswordResetRequest(string NewPassword);
+
 public sealed record SellerInteractionRequest(
     string IdempotencyKey,
     string CustomerPhone,
