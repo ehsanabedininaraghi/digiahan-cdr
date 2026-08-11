@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f7fb">
+  <title>میز کار فروش دیجی‌آهن</title>
+  <link rel="stylesheet" href="./style.css?v=4311">
+  <link rel="stylesheet" href="./balance.css?v=4311">
+</head>
+<body>
+  <div id="accessGate" class="access-gate">
+    <form id="accessForm" class="access-card">
+      <span class="brand-mark">D</span>
+      <h1>ورود به میز کار فروش</h1>
+      <p>با نام کاربری و رمز شخصی وارد شوید. داخلی‌ها و اطلاعات هر فروشنده از سمت سرور تعیین می‌شوند.</p>
+      <label><span>نام کاربری</span><input id="accessUsername" autocomplete="username" required placeholder="مثلاً seller-215"></label>
+      <label><span>رمز عبور</span><input id="accessPassword" type="password" autocomplete="current-password" required placeholder="رمز عبور فروشنده"></label>
+      <button class="primary-button" type="submit">ورود امن</button>
+      <small id="accessError"></small>
+    </form>
+  </div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="دیجی‌آهن">
+        <span class="brand-mark">D</span>
+        <span><b>دیجی‌آهن</b><small>مرکز فروش</small></span>
+      </a>
+      <nav class="nav-list" aria-label="منوی اصلی">
+        <button class="nav-item active" data-view="workspace"><span class="nav-icon">⌂</span><span>میز کار من</span></button>
+        <button class="nav-item" data-view="tasks"><span class="nav-icon">✓</span><span>پیگیری‌ها</span><em>۵</em></button>
+        <button class="nav-item" data-view="customers"><span class="nav-icon">♙</span><span>مشتریان</span></button>
+        <button class="nav-item" data-view="reports"><span class="nav-icon">⌁</span><span>عملکرد من</span></button>
+      </nav>
+        <div class="sidebar-foot">
+        <div class="profile-avatar">ح‌م</div>
+        <div><b id="sidebarSellerName">حسنا مظاهری</b><small id="sidebarSellerExtension">کارشناس فروش · داخلی ۲۱۵</small></div>
+        <button id="logoutButton" class="icon-button" aria-label="خروج" title="خروج">↪</button>
+      </div>
+    </aside>
+
+    <div class="page">
+      <header class="topbar">
+        <button id="menuButton" class="mobile-menu icon-button" aria-label="نمایش منو">☰</button>
+        <div class="page-heading">
+          <p id="todayLabel">یکشنبه، ۱۸ مرداد</p>
+          <h1>صبح بخیر <span id="welcomeName">حسنا</span> <span>👋</span></h1>
+        </div>
+        <label class="global-search">
+          <span>⌕</span>
+          <input id="globalSearch" type="search" placeholder="جست‌وجوی نام، شرکت یا شماره موبایل…">
+          <kbd>/</kbd>
+          <div id="searchResults" class="search-results hidden" role="listbox"></div>
+        </label>
+        <div class="top-actions">
+          <button class="icon-button notification" aria-label="اعلان‌ها">♧<i></i></button>
+          <button id="simulateCall" class="primary-button"><span>☎</span> شبیه‌سازی تماس</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="daily-overview" aria-label="خلاصه امروز">
+          <div class="section-title compact-title">
+            <div><h2>امروز در یک نگاه</h2><p>وضعیت فعالیت شما تا این لحظه</p></div>
+            <span class="live-chip"><i></i> به‌روز</span>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card urgent"><div class="metric-icon">!</div><div><span>پیگیری عقب‌افتاده</span><strong id="statOverdue">۳</strong><small>نیازمند اقدام فوری</small></div></article>
+            <article class="metric-card"><div class="metric-icon blue">✓</div><div><span>پیگیری امروز</span><strong id="statDue">۲</strong><small>تا پایان ساعت کاری</small></div></article>
+            <article class="metric-card"><div class="metric-icon violet">☎</div><div><span>مکالمه واقعی</span><strong id="statConversations">۱۲</strong><small><b class="positive">امروز</b> مکالمه پاسخ‌داده‌شده</small></div></article>
+            <article class="metric-card"><div class="metric-icon amber">◈</div><div><span>قیمت اعلام‌شده</span><strong id="statPriced">۷</strong><small id="missingResults">۱ نتیجه ناقص</small></div></article>
+            <article class="metric-card"><div class="metric-icon green">▣</div><div><span>سفارش امروز</span><strong id="statOrders">۲</strong><small><b class="positive" id="statLost">۳ عدم خرید</b> ثبت‌شده</small></div></article>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="main-column">
+            <section id="activeCallCard" class="active-call-card hidden">
+              <div class="call-status-line"><span class="call-wave"><i></i><i></i><i></i><i></i></span><b>تماس ورودی در حال انجام</b><time id="callTimer">۰۰:۰۰</time></div>
+              <button id="endCall" class="danger-button">پایان تماس</button>
+            </section>
+
+            <section class="customer-card">
+              <header class="customer-header">
+                <div class="customer-identity">
+                  <div class="customer-avatar">آ‌س</div>
+                  <div>
+                    <div class="name-line"><h2 id="customerName">شرکت ساختمانی آریا سازه</h2><span id="customerState" class="status-chip active">مشتری فعال</span></div>
+                    <p><span id="contactName">علی احمدی</span><i></i><b id="customerPhone" dir="ltr">0912 283 2869</b><button id="copyPhone" class="copy-button" title="کپی شماره">▣</button></p>
+                  </div>
+                </div>
+                <div class="customer-actions">
+                  <span id="readOnlyNotice" class="read-only-notice hidden">مشاهده فقط‌خواندنی</span>
+                  <button id="manageCustomer" class="secondary-button">مدیریت مشتری</button>
+                  <button id="newInteraction" class="primary-button">ثبت تعامل</button>
+                </div>
+              </header>
+
+              <div class="customer-meta">
+                <div><span>مسئول مشتری</span><b id="customerOwner">—</b></div>
+                <div><span>منبع شناسایی</span><b id="identitySource">—</b></div>
+                <div><span>علاقه اصلی</span><b id="mainInterest">—</b></div>
+                <div><span>کد مشتری</span><b id="customerCode">—</b></div>
+              </div>
+
+              <div class="snapshot-grid five-columns">
+                <div><span>آخرین تماس</span><b id="snapshotLastCall">—</b><small id="snapshotCallCount">بدون سابقه</small></div>
+                <div><span>آخرین خرید</span><b id="snapshotLastPurchase">—</b><small id="snapshotLastProduct">بدون خرید ثبت‌شده</small></div>
+                <div><span>فاکتورهای ۳۰ روز</span><b id="snapshotInvoices">۰</b><small>اطلاعات حسابداری</small></div>
+                <div><span>فروش ۳۰ روزه</span><b id="snapshotSales">۰</b><small>ریال</small></div>
+                <div><span>مانده حساب</span><b id="snapshotBalance">—</b><small id="snapshotBalanceStatus">در انتظار همگام‌سازی</small></div>
+              </div>
+            </section>
+
+            <section id="nextActionCard" class="next-action-card hidden">
+              <div class="next-icon">◎</div>
+              <div class="next-copy"><span>اقدام بعدی</span><h3 id="nextSubject">—</h3><p id="nextCustomer">—</p></div>
+              <div class="due-date"><span id="nextDay">—</span><b id="nextTime">—</b><small id="nextStatus">—</small></div>
+              <div class="next-buttons"><button id="completeTask" class="success-button">✓ انجام شد</button><button class="icon-button">•••</button></div>
+            </section>
+
+            <section class="timeline-panel panel">
+              <div class="section-title">
+                <div><h2>سابقه ارتباط با مشتری</h2><p>تماس‌ها، تعاملات، سفارش‌ها و پیگیری‌ها در یک مسیر</p></div>
+                <div class="segmented-control" role="tablist">
+                  <button class="active" data-filter="all">همه</button><button data-filter="mine">من</button><button data-filter="others">سایر همکاران</button><button data-filter="orders">سفارش‌ها</button>
+                </div>
+              </div>
+              <div id="timeline" class="timeline">
+                <div class="day-label"><span>امروز</span></div>
+                <article class="timeline-item mine" data-kind="mine"><div class="timeline-icon follow">↗</div><div class="timeline-content"><header><div><b>پیگیری برنامه‌ریزی‌شده</b><span>توسط حسنا مظاهری</span></div><time>۱۰:۳۰</time></header><p>پیگیری قیمت تیرآهن ۱۶ و دریافت نتیجه تصمیم مدیر خرید</p><div class="tag-row"><span>تیرآهن ۱۶</span><span class="blue-tag">پیگیری</span></div></div></article>
+                <article class="timeline-item mine" data-kind="mine"><div class="timeline-icon quote">﷼</div><div class="timeline-content"><header><div><b>قیمت اعلام شد</b><span>توسط حسنا مظاهری</span></div><time>۴ روز پیش · ۱۴:۲۰</time></header><p>قیمت ۲۰ تن تیرآهن سایز ۱۶ ذوب‌آهن اعلام شد. مشتری برای تأیید نهایی نیاز به زمان داشت.</p><div class="tag-row"><span>تیرآهن ۱۶</span><span>۲۰ تن</span><span class="amber-tag">در حال تصمیم</span></div></div></article>
+                <div class="day-label"><span>۱۵ مرداد</span></div>
+                <article class="timeline-item others" data-kind="others"><div class="timeline-icon lost">×</div><div class="timeline-content"><header><div><b>خرید انجام نشد</b><span>توسط مجید پورمهدی</span></div><time>۱۱:۴۵</time></header><p>مشتری قیمت را بالاتر از پیشنهاد رقیب دانست.</p><div class="tag-row"><span>تیرآهن ۱۴</span><span class="red-tag">دلیل: قیمت</span></div></div></article>
+                <div class="day-label"><span>۲۷ تیر</span></div>
+                <article class="timeline-item order" data-kind="orders"><div class="timeline-icon order">▣</div><div class="timeline-content"><header><div><b>سفارش ثبت شد</b><span>شماره سفارش #۸۷۲۱</span></div><time>۱۶:۱۰</time></header><p>۲۲ تن تیرآهن سایز ۱۶ ذوب‌آهن</p><div class="order-summary"><div><span>وزن سفارش</span><b>۲۲ تن</b></div><div><span>مبلغ نهایی</span><b>۸۵۰,۰۰۰,۰۰۰ تومان</b></div><span class="success-tag">تکمیل‌شده</span></div></div></article>
+              </div>
+              <button id="loadMore" class="load-more">نمایش سوابق بیشتر <span>↓</span></button>
+            </section>
+          </div>
+
+          <aside class="side-column">
+            <section class="task-panel panel">
+              <div class="section-title"><div><h2>پیگیری‌های من</h2><p>براساس اولویت اقدام</p></div><button class="text-button">مشاهده همه</button></div>
+              <div id="followUpList" class="task-list">
+                <article class="task overdue"><i></i><div><b>شرکت جهان فولاد</b><span>اعلام موجودی ورق ۳ میل</span><small>۴۵ دقیقه عقب‌افتاده</small></div><button>›</button></article>
+                <article class="task"><i></i><div><b>احمد رضایی</b><span>پیگیری پیش‌فاکتور میلگرد</span><small>امروز · ۱۴:۰۰</small></div><button>›</button></article>
+                <article class="task"><i></i><div><b>شرکت سازه گستر</b><span>هماهنگی شرایط پرداخت</span><small>امروز · ۱۶:۳۰</small></div><button>›</button></article>
+              </div>
+              <button class="full-secondary">+ افزودن پیگیری</button>
+            </section>
+
+            <section class="quality-panel panel">
+              <div class="section-title"><div><h2>کیفیت ثبت امروز</h2><p>داده‌های موردنیاز برای فروش بهتر</p></div><strong id="qualityPercent">۰٪</strong></div>
+              <div class="progress"><i id="qualityBar" style="width:0"></i></div>
+              <ul><li class="done"><span>✓</span> <b id="qualityCompleted">۰</b> مکالمه دارای نتیجه</li><li class="done"><span>✓</span> دلایل عدم خرید کنترل می‌شوند</li><li id="qualityMissingRow" class="warning"><span>!</span> <b id="qualityMissing">۰</b> مکالمه بدون نتیجه</li></ul>
+              <button id="completeMissing" class="full-secondary">تکمیل موارد ناقص</button>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+  <aside id="customerDrawer" class="interaction-drawer hidden" aria-label="مدیریت مشتری">
+    <header class="drawer-header"><div><span>دفترچه یکپارچه مشتریان</span><h2 id="customerDrawerTitle">ثبت مشتری</h2></div><button id="closeCustomerDrawer" class="icon-button">×</button></header>
+    <form id="customerForm">
+      <div class="form-heading"><span>♙</span><div><h3>اطلاعات پایه مشتری</h3><p>اطلاعات روی هویت مرکزی ذخیره می‌شود و دیدار/حسابداری جدول جداگانه‌ای نمی‌سازند.</p></div></div>
+      <div class="form-grid">
+        <label><span>نام شخص</span><input id="masterDisplayName" maxlength="300" autocomplete="off"></label>
+        <label><span>نام شرکت</span><input id="masterCompanyName" maxlength="300" autocomplete="organization"></label>
+        <label><span>مسئول مشتری</span><input id="masterOwnerName" maxlength="200" autocomplete="off"></label>
+      </div>
+      <label class="full-field"><span>شماره‌ها <small>هر شماره در یک خط</small></span><textarea id="masterPhones" rows="7" dir="ltr" required></textarea></label>
+      <p class="customer-form-note">حذف مشتری به‌صورت آرشیو امن انجام می‌شود؛ تاریخچه تماس و خرید پاک نخواهد شد.</p>
+    </form>
+    <footer class="drawer-footer"><button id="archiveCustomer" class="danger-button hidden" type="button">آرشیو مشتری</button><span></span><button id="saveCustomer" class="primary-button" type="button">ذخیره مشتری</button></footer>
+  </aside>
+  <aside id="interactionDrawer" class="interaction-drawer hidden" aria-label="ثبت نتیجه تماس">
+    <header class="drawer-header"><div><span id="drawerEyebrow">ثبت تعامل جدید</span><h2>نتیجه مکالمه با آریا سازه</h2></div><button id="closeDrawer" class="icon-button">×</button></header>
+    <div class="drawer-progress"><i class="active"></i><i></i><i></i><span id="stepLabel">۱ از ۳ · نیاز مشتری</span></div>
+    <form id="interactionForm">
+      <section class="form-step active" data-step="1">
+        <div class="form-heading"><span>۱</span><div><h3>مشتری چه می‌خواست؟</h3><p>اطلاعات اصلی درخواست را ثبت کنید؛ موارد نامشخص را خالی بگذارید.</p></div></div>
+        <div class="form-grid">
+          <label><span>کالا</span><select id="product"><option>تیرآهن</option><option>میلگرد</option><option>ورق</option><option>پروفیل</option><option>نبشی و ناودانی</option></select></label>
+          <label><span>سایز</span><select id="size"><option>۱۶</option><option>۱۴</option><option>۱۸</option><option>۲۰</option></select></label>
+          <label><span>برند</span><select><option>ذوب‌آهن اصفهان</option><option>فایکو</option><option>یزد</option><option>نامشخص</option></select></label>
+          <label><span>مقدار</span><span class="compound-input"><input type="number" value="20" min="0"><select><option>تن</option><option>شاخه</option><option>کیلوگرم</option></select></span></label>
+        </div>
+        <label class="full-field"><span>توضیح کوتاه <small>اختیاری</small></span><textarea rows="3" placeholder="نکته‌ای که همکار بعدی باید بداند…"></textarea></label>
+      </section>
+
+      <section class="form-step" data-step="2">
+        <div class="form-heading"><span>۲</span><div><h3>در این مکالمه چه کاری انجام شد؟</h3><p>می‌توانید بیش از یک مورد را انتخاب کنید.</p></div></div>
+        <div class="check-grid">
+          <label><input type="checkbox" checked><span><b>قیمت اعلام شد</b><small>قیمت روز به مشتری گفته شد</small></span></label>
+          <label><input type="checkbox" checked><span><b>موجودی بررسی شد</b><small>وضعیت تأمین کالا بررسی شد</small></span></label>
+          <label><input type="checkbox"><span><b>شرایط پرداخت توضیح داده شد</b><small>نقد، چک یا اعتبار</small></span></label>
+          <label><input type="checkbox"><span><b>جایگزین پیشنهاد شد</b><small>کالای مشابه یا برند دیگر</small></span></label>
+        </div>
+      </section>
+
+      <section class="form-step" data-step="3">
+        <div class="form-heading"><span>۳</span><div><h3>نتیجه این مکالمه چه شد؟</h3><p>یک نتیجه اصلی انتخاب کنید.</p></div></div>
+        <div class="outcome-grid">
+          <label><input type="radio" name="outcome" value="ORDER"><span class="outcome-icon order">▣</span><b>سفارش ثبت شد</b></label>
+          <label><input type="radio" name="outcome" value="DECIDING"><span class="outcome-icon deciding">◷</span><b>در حال تصمیم‌گیری</b></label>
+          <label><input type="radio" name="outcome" value="FOLLOW_UP" checked><span class="outcome-icon follow">↗</span><b>نیاز به پیگیری</b></label>
+          <label><input type="radio" name="outcome" value="LOST"><span class="outcome-icon lost">×</span><b>فعلاً خرید نکرد</b></label>
+          <label><input type="radio" name="outcome" value="NON_SALES"><span class="outcome-icon neutral">–</span><b>تماس غیر فروش</b></label>
+        </div>
+        <div id="followUpFields" class="conditional-card">
+          <header><b>زمان پیگیری بعدی</b><span>الزامی</span></header>
+          <div class="form-grid"><label><span>تاریخ شمسی</span><input type="text" inputmode="numeric" id="followDate" placeholder="۱۴۰۵/۰۵/۲۰" required></label><label><span>ساعت</span><input type="time" value="10:30" required></label></div>
+          <label class="full-field"><span>دلیل پیگیری</span><input type="text" value="دریافت تصمیم نهایی مدیر خرید"></label>
+        </div>
+        <div id="lossFields" class="conditional-card hidden">
+          <header><b>دلیل اصلی عدم خرید</b><span>الزامی</span></header>
+          <div class="reason-grid"><label><input type="radio" name="loss" value="PRICE"><span>قیمت</span></label><label><input type="radio" name="loss" value="NO_STOCK"><span>عدم موجودی</span></label><label><input type="radio" name="loss" value="PAYMENT"><span>شرایط پرداخت</span></label><label><input type="radio" name="loss" value="DELIVERY"><span>زمان تحویل</span></label><label><input type="radio" name="loss" value="COMPETITOR"><span>خرید از رقیب</span></label><label><input type="radio" name="loss" value="NO_NEED"><span>فعلاً نیاز ندارد</span></label></div>
+        </div>
+      </section>
+    </form>
+    <footer class="drawer-footer"><button id="prevStep" class="secondary-button hidden">مرحله قبل</button><span></span><button id="nextStep" class="primary-button">ادامه</button><button id="saveInteraction" class="primary-button hidden">ثبت نتیجه مکالمه</button></footer>
+  </aside>
+
+  <script src="./app.js?v=4311"></script>
+</body>
+</html>

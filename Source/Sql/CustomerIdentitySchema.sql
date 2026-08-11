@@ -9,12 +9,23 @@ BEGIN
         DisplayName nvarchar(300) NULL,
         CompanyName nvarchar(300) NULL,
         OwnerName nvarchar(200) NULL,
+        MasterSource nvarchar(30) NOT NULL
+            CONSTRAINT DF_CustomerIdentities_MasterSource DEFAULT(N'LEGACY'),
+        IsActive bit NOT NULL
+            CONSTRAINT DF_CustomerIdentities_IsActive DEFAULT(1),
         CreatedAtUtc datetime2(0) NOT NULL
             CONSTRAINT DF_CustomerIdentities_CreatedAtUtc DEFAULT(SYSUTCDATETIME()),
         UpdatedAtUtc datetime2(0) NOT NULL
             CONSTRAINT DF_CustomerIdentities_UpdatedAtUtc DEFAULT(SYSUTCDATETIME())
     );
 END;
+
+IF COL_LENGTH(N'dbo.CustomerIdentities',N'MasterSource') IS NULL
+    ALTER TABLE dbo.CustomerIdentities ADD MasterSource nvarchar(30) NOT NULL
+        CONSTRAINT DF_CustomerIdentities_MasterSource DEFAULT(N'LEGACY');
+IF COL_LENGTH(N'dbo.CustomerIdentities',N'IsActive') IS NULL
+    ALTER TABLE dbo.CustomerIdentities ADD IsActive bit NOT NULL
+        CONSTRAINT DF_CustomerIdentities_IsActive DEFAULT(1);
 
 IF OBJECT_ID(N'dbo.CustomerIdentityPhones',N'U') IS NULL
 BEGIN
@@ -169,9 +180,9 @@ AccountingLink AS
 SELECT
     p.NormalizedPhone,
     i.IdentityId,
-    COALESCE(NULLIF(d.FullName,N''),NULLIF(i.DisplayName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')) AS DisplayName,
-    COALESCE(NULLIF(d.CompanyName,N''),NULLIF(i.CompanyName,N''),NULLIF(a.CustomerName,N'')) AS CompanyName,
-    COALESCE(NULLIF(d.OwnerName,N''),NULLIF(i.OwnerName,N'')) AS OwnerName,
+    COALESCE(NULLIF(i.DisplayName,N''),NULLIF(d.FullName,N''),NULLIF(a.CustomerName,N''),NULLIF(d.CompanyName,N'')) AS DisplayName,
+    COALESCE(NULLIF(i.CompanyName,N''),NULLIF(d.CompanyName,N''),NULLIF(a.CustomerName,N'')) AS CompanyName,
+    COALESCE(NULLIF(i.OwnerName,N''),NULLIF(d.OwnerName,N'')) AS OwnerName,
     d.DidarContactCode,
     a.SourceDatabase,
     a.FiscalYear,

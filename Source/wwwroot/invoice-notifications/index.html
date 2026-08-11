@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ارسال اطلاعات خرید مشتری</title>
+<link rel="stylesheet" href="style.css?v=4310">
+</head>
+<body>
+<header>
+  <div><h1>ارسال اطلاعات خرید مشتری <span>v4.3.10</span></h1><p>فقط فاکتورهای امروز و دیروز؛ هر شرح غیرخالی، حواله محسوب می‌شود.</p></div>
+  <a href="/dashboard">بازگشت به داشبورد</a>
+</header>
+<main>
+  <section class="toolbar">
+    <label>توکن مدیریت<input id="apiToken" type="password" placeholder="برای دسترسی از شبکه وارد کنید"></label>
+    <label>نام کاربر<input id="actor" value="مدیر"></label>
+    <label>وضعیت<select id="status"><option value="all">همه</option><option value="READY">آماده ارسال</option><option value="NEEDS_PHONE">بدون موبایل</option><option value="NEEDS_IDENTITY">بدون هویت</option><option value="PREPARED">متن آماده</option></select></label>
+    <button id="saveToken" class="secondary">ذخیره توکن</button>
+    <button id="discover" class="secondary">بررسی فاکتورهای جدید</button>
+    <button id="refresh" class="secondary">به‌روزرسانی</button>
+  </section>
+
+  <section class="notice">نمایش فهرست در شبکه داخلی بدون توکن انجام می‌شود. برای تیک‌زدن، تغییر شماره یا آماده‌سازی پیام، توکن مدیریت لازم است.</section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>فاکتورهای دارای شرح حواله</h2><p id="summary">در حال دریافت...</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ارسال شد</th><th>فاکتور</th><th>تاریخ</th><th>مشتری</th><th>محصول</th><th>شرح / حواله</th><th>Primary Mobile</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="preparedPanel" class="panel hidden">
+    <div class="panel-head"><div><h2>متن‌های آماده ارسال</h2><p>متن را کپی و دستی بفرستید؛ سپس «ارسال شد» را ثبت کنید.</p></div></div>
+    <div id="preparedRows" class="prepared-grid"></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="app.js?v=4310"></script>
+</body>
+</html>

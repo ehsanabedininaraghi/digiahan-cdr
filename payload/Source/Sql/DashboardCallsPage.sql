@@ -1,8 +1,10 @@
 ﻿WITH Raw AS
 (
-    SELECT r.*, CallKey=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
+    SELECT r.RawCDRId,r.LinkedId,r.UniqueId,r.ReceivedAtUtc,r.Src,r.Dst,r.Did,r.Dcontext,
+           r.Disposition,r.Billsec,r.Duration,r.RecordingFile,
+           CallKey=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
     FROM dbo.RawCDR r
-    WHERE r.Calldate>=@s AND r.Calldate<@e
+    WHERE r.ReceivedAtUtc>=@s AND r.ReceivedAtUtc<@e
 ),
 Eligible AS
 (
@@ -13,7 +15,7 @@ Grouped AS
     SELECT
         CallKey,
         FirstId=MIN(RawCDRId),
-        StartedAt=MIN(Calldate),
+        StartedAt=MIN(ReceivedAtUtc),
         CustomerPhone=MAX(CASE
             WHEN (NULLIF(Did,N'') IS NOT NULL OR Dcontext LIKE N'%from-trunk%') AND LEN(ISNULL(Src,N''))>4 THEN Src
             WHEN (Dcontext LIKE N'%from-internal%' OR Dcontext LIKE N'%outbound%') AND LEN(ISNULL(Dst,N''))>4 THEN Dst
@@ -114,4 +116,5 @@ SELECT
     CustomerName,CompanyName,OwnerName,DidarContactCode,IsNewCustomer
 FROM Paged
 WHERE RowNum BETWEEN @rowStart AND @rowEnd
-ORDER BY RowNum;
+ORDER BY RowNum
+OPTION(RECOMPILE);

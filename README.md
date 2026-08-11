@@ -23,4 +23,9 @@ dotnet run
 داشبورد: `http://localhost:5088/dashboard`
 
 ## نسخه فعلی
-`v3.1.0`
+`v4.3.1`
+
+راهنمای نصب و تغییرات این نسخه:
+
+- [README-v4.3.1-FA.md](README-v4.3.1-FA.md)
+- [CHANGELOG-v4.3.1.md](CHANGELOG-v4.3.1.md)

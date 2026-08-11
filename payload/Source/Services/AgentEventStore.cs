@@ -12,6 +12,7 @@ public sealed class AgentEventStore
     {
         var envelope = new AgentEventEnvelope(
             Interlocked.Increment(ref _sequence),
+            DateTime.UtcNow,
             card);
         _events[extension] = envelope;
         return envelope;
