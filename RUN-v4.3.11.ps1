@@ -1,7 +1,10 @@
 param(
     [string]$RepositoryRoot = "D:\DigiAhan\CDR4.0",
     [string]$ReleaseVersion = "4.3.11",
-    [switch]$ResetDashboardPassword
+    [switch]$ResetDashboardPassword,
+    [switch]$EnableJourneyPilot,
+    [string[]]$JourneyPilotSellerKeys = @(),
+    [switch]$EnableJourneyAutoCapture
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +16,8 @@ $sourceRoot = Join-Path $RepositoryRoot "Source"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runDir = Join-Path $RepositoryRoot "Logs\Runs\v$version-$stamp"
 $backupRoot = Join-Path $RepositoryRoot "_backups\v$version-$stamp"
+$dashboardStopped = $false
+$filesInstalled = $false
 
 $relativeFiles = @(
     "Source\Program.cs",
@@ -102,6 +107,23 @@ $relativeFiles = @(
     "tools\ai\transcribe_sample.py"
 )
 
+if ([version]$version -ge [version]"4.4.0") {
+    $relativeFiles += @(
+        "Source\appsettings.JourneyKernel.example.json",
+        "Source\Features\Journey\CustomerJourneyEndpoints.cs",
+        "Source\Models\CustomerJourneyModels.cs",
+        "Source\Services\CustomerJourneyRepository.cs",
+        "Source\Services\CustomerJourneyRules.cs",
+        "Source\Sql\CustomerJourneyKernelV440.sql",
+        "Source\wwwroot\seller-v3\app.js",
+        "Source\wwwroot\seller-v3\index.html",
+        "Source\wwwroot\seller-v3\style.css",
+        "Source\wwwroot\journey-control\app.js",
+        "Source\wwwroot\journey-control\index.html",
+        "Source\wwwroot\journey-control\style.css"
+    )
+}
+
 if (-not (Test-Path -LiteralPath $sourceRoot)) { throw "Repository source not found: $sourceRoot" }
 if (-not (Test-Path -LiteralPath $payloadRoot)) { throw "Release payload not found: $payloadRoot" }
 
@@ -144,6 +166,7 @@ try {
     if ($remainingAppProcesses.Count -gt 0) {
         throw "The existing DigiAhan.CDR.Receiver process could not be stopped."
     }
+    $dashboardStopped = $true
 
     $phase = "BACKUP"
     Write-Host "[3/8] Backing up files that will change..." -ForegroundColor Cyan
@@ -165,6 +188,7 @@ try {
         New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
         Copy-Item -LiteralPath $source -Destination $target -Force
     }
+    $filesInstalled = $true
 
     $dashboardConfigPath = Join-Path $sourceRoot "appsettings.Dashboard.local.json"
     $passwordHash = $null
@@ -230,6 +254,36 @@ try {
     $dataConfig | ConvertTo-Json -Depth 5 |
         Set-Content -LiteralPath $localConfigPath -Encoding UTF8
 
+    if ($EnableJourneyAutoCapture -and -not $EnableJourneyPilot) {
+        throw "EnableJourneyAutoCapture requires EnableJourneyPilot."
+    }
+    if ($EnableJourneyPilot) {
+        $cleanPilotKeys = @($JourneyPilotSellerKeys | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        if ($cleanPilotKeys.Count -eq 0) {
+            throw "At least one JourneyPilotSellerKeys value is required for a safe first pilot."
+        }
+        $journeyConfigPath = Join-Path $sourceRoot "appsettings.JourneyKernel.local.json"
+        if (Test-Path -LiteralPath $journeyConfigPath) {
+            $journeyConfigBackup = Join-Path $backupRoot "Source\appsettings.JourneyKernel.local.json"
+            New-Item -ItemType Directory -Force -Path (Split-Path $journeyConfigBackup) | Out-Null
+            Copy-Item -LiteralPath $journeyConfigPath -Destination $journeyConfigBackup -Force
+        }
+        [ordered]@{
+            JourneyKernel = [ordered]@{
+                Enabled = $true
+                AutoCaptureSellerInteractions = [bool]$EnableJourneyAutoCapture
+                DefaultLeadSlaMinutes = 120
+                DefaultFollowUpMinutes = 1440
+                PilotSellerKeys = $cleanPilotKeys
+            }
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $journeyConfigPath -Encoding UTF8
+        Write-Host "Journey Kernel pilot enabled only for: $($cleanPilotKeys -join ', ')" -ForegroundColor Yellow
+        Write-Host "Automatic Seller v2 capture: $([bool]$EnableJourneyAutoCapture)" -ForegroundColor Yellow
+    }
+    elseif ([version]$version -ge [version]"4.4.0") {
+        Write-Host "Journey Kernel remains disabled/preserved. Seller v2 is the active production workspace." -ForegroundColor Green
+    }
+
     $phase = "BUILD"
     Write-Host "[5/8] Building v$version..." -ForegroundColor Cyan
     Push-Location $sourceRoot
@@ -291,6 +345,17 @@ try {
         $sellerPage.Content -notmatch 'id="interactionDrawerTitle"') {
         throw "Seller workspace regression verification failed."
     }
+    if ([version]$version -ge [version]"4.4.0") {
+        $sellerV3Page = Invoke-WebRequest "http://localhost:5088/seller-v3/index.html" -UseBasicParsing -TimeoutSec 30
+        if ($sellerV3Page.StatusCode -ne 200 -or $sellerV3Page.Content -notmatch 'id="workQueue"' -or
+            $sellerV3Page.Content -match '/dashboard') {
+            throw "Seller v3 isolated workspace verification failed."
+        }
+        if ($EnableJourneyPilot) {
+            $journeyExceptions = Invoke-RestMethod "http://localhost:5088/api/journey-control/exceptions?take=1" `
+                -WebSession $adminSession -TimeoutSec 180
+        }
+    }
     $versionScript = Invoke-WebRequest "http://localhost:5088/version.js" -UseBasicParsing -TimeoutSec 30
     if ($versionScript.StatusCode -ne 200 -or $versionScript.Content -notmatch [regex]::Escape($version)) {
         throw "Global version badge verification failed."
@@ -317,22 +382,103 @@ Schedules=$($schedules.Count)
 NotificationApi=OK
 SellerAdminApi=OK
 SellerUsers=$(@($sellerUsers).Count)
+JourneyPilot=$([bool]$EnableJourneyPilot)
+JourneyAutoCapture=$([bool]($EnableJourneyPilot -and $EnableJourneyAutoCapture))
 "@ | Set-Content (Join-Path $runDir "summary.txt") -Encoding UTF8
 
     Write-Host "v$version installed successfully." -ForegroundColor Green
     Write-Host "Dashboard: http://localhost:5088/dashboard" -ForegroundColor Green
     Write-Host "Seller users: http://localhost:5088/seller-admin" -ForegroundColor Green
     Write-Host "Seller login: http://localhost:5088/seller-v2" -ForegroundColor Green
+    if ([version]$version -ge [version]"4.4.0") {
+        Write-Host "Seller v3 pilot: http://localhost:5088/seller-v3" -ForegroundColor Green
+        Write-Host "Journey control: http://localhost:5088/journey-control" -ForegroundColor Green
+    }
     Write-Host "Invoice notifications: http://localhost:5088/invoice-notifications" -ForegroundColor Green
     Write-Host "SMS operator dashboard: http://localhost:5088/sms-dashboard" -ForegroundColor Green
     Write-Host "SQL Log: $($systemHealth.logSizeMb) MB | Recovery: $($systemHealth.recoveryModel)" -ForegroundColor Yellow
 }
 catch {
-    $_ | Format-List * -Force | Out-String | Set-Content (Join-Path $runDir "fatal-error.txt") -Encoding UTF8
-    "FAILED`nVersion=$version`nPhase=$phase`nBackup=$backupRoot`nError=$($_.Exception.Message)" |
+    $fatalError = $_
+    $fatalError | Format-List * -Force | Out-String | Set-Content (Join-Path $runDir "fatal-error.txt") -Encoding UTF8
+    "FAILED`nVersion=$version`nPhase=$phase`nBackup=$backupRoot`nError=$($fatalError.Exception.Message)" |
         Set-Content (Join-Path $runDir "summary.txt") -Encoding UTF8
-    Write-Host $_.Exception.ToString() -ForegroundColor Red
-    throw
+    Write-Host $fatalError.Exception.ToString() -ForegroundColor Red
+    if ($dashboardStopped) {
+        Write-Host "Attempting automatic rollback to the pre-installation files..." -ForegroundColor Yellow
+        try {
+            $rollbackProcessIds = @(
+                Get-NetTCPConnection -LocalPort 5088 -State Listen -ErrorAction SilentlyContinue |
+                    Where-Object { $_.OwningProcess -gt 0 } |
+                    Select-Object -ExpandProperty OwningProcess
+                Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Id
+            ) | Sort-Object -Unique
+            foreach ($rollbackProcessId in $rollbackProcessIds) {
+                Stop-Process -Id $rollbackProcessId -Force -ErrorAction SilentlyContinue
+            }
+
+            if ($filesInstalled) {
+                $quarantineRoot = Join-Path $backupRoot "failed-v$version-files"
+                foreach ($relative in $relativeFiles) {
+                    $target = Join-Path $RepositoryRoot $relative
+                    $backup = Join-Path $backupRoot $relative
+                    if (Test-Path -LiteralPath $backup -PathType Leaf) {
+                        New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+                        Copy-Item -LiteralPath $backup -Destination $target -Force
+                    }
+                    elseif (Test-Path -LiteralPath $target -PathType Leaf) {
+                        $quarantine = Join-Path $quarantineRoot $relative
+                        New-Item -ItemType Directory -Force -Path (Split-Path $quarantine) | Out-Null
+                        Move-Item -LiteralPath $target -Destination $quarantine -Force
+                    }
+                }
+
+                if ($EnableJourneyPilot) {
+                    $journeyConfigPath = Join-Path $sourceRoot "appsettings.JourneyKernel.local.json"
+                    $journeyConfigBackup = Join-Path $backupRoot "Source\appsettings.JourneyKernel.local.json"
+                    if (Test-Path -LiteralPath $journeyConfigBackup -PathType Leaf) {
+                        Copy-Item -LiteralPath $journeyConfigBackup -Destination $journeyConfigPath -Force
+                    }
+                    elseif (Test-Path -LiteralPath $journeyConfigPath -PathType Leaf) {
+                        $journeyConfigQuarantine = Join-Path $quarantineRoot "Source\appsettings.JourneyKernel.local.json"
+                        New-Item -ItemType Directory -Force -Path (Split-Path $journeyConfigQuarantine) | Out-Null
+                        Move-Item -LiteralPath $journeyConfigPath -Destination $journeyConfigQuarantine -Force
+                    }
+                }
+            }
+
+            Push-Location $sourceRoot
+            try {
+                dotnet build --configuration Release --no-restore -p:NuGetAudit=false
+                if ($LASTEXITCODE -ne 0) { throw "Rollback build failed." }
+            }
+            finally { Pop-Location }
+
+            $rollbackStdout = Join-Path $runDir "rollback-application-stdout.log"
+            $rollbackStderr = Join-Path $runDir "rollback-application-stderr.log"
+            Start-Process dotnet -ArgumentList @("run","--no-build","--configuration","Release") `
+                -WorkingDirectory $sourceRoot -RedirectStandardOutput $rollbackStdout -RedirectStandardError $rollbackStderr `
+                -WindowStyle Hidden | Out-Null
+            $rollbackHealthy = $false
+            foreach ($rollbackAttempt in 1..60) {
+                Start-Sleep -Seconds 1
+                try {
+                    $rollbackHealth = Invoke-RestMethod "http://localhost:5088/health" -TimeoutSec 3
+                    if ($rollbackHealth.status -eq "healthy") { $rollbackHealthy = $true; break }
+                }
+                catch { }
+            }
+            if (-not $rollbackHealthy) { throw "Rollback application did not become healthy." }
+            Write-Host "Automatic rollback succeeded; the previous dashboard is healthy." -ForegroundColor Green
+            Add-Content -LiteralPath (Join-Path $runDir "summary.txt") -Value "`nAutomaticRollback=SUCCESS" -Encoding UTF8
+        }
+        catch {
+            Write-Host "Automatic rollback failed: $($_.Exception.Message)" -ForegroundColor Red
+            Add-Content -LiteralPath (Join-Path $runDir "summary.txt") -Value "`nAutomaticRollback=FAILED`nRollbackError=$($_.Exception.Message)" -Encoding UTF8
+        }
+    }
+    throw $fatalError
 }
 finally {
     try { Stop-Transcript | Out-Null } catch { }

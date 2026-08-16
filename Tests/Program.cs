@@ -41,4 +41,16 @@ var normalizedUtc = TehranClock.NormalizeIncomingEventUtc(explicitUtc.ToString("
 if (Math.Abs((normalizedUtc - explicitUtc).TotalSeconds) > 2)
     throw new InvalidOperationException("Explicit UTC timestamp changed during normalization.");
 
-Console.WriteLine("v4.3.12 smoke tests passed.");
+if (CustomerJourneyRules.NormalizePriority(0) != 1 || CustomerJourneyRules.NormalizePriority(9) != 4)
+    throw new InvalidOperationException("Journey priority boundaries are not enforced.");
+Equal("QUOTE_SENT", CustomerJourneyRules.RequireStage("quote_sent"), "Journey stage normalization");
+var future = CustomerJourneyRules.RequireFutureUtc(DateTime.UtcNow.AddHours(1), DateTime.UtcNow, "INVALID");
+if (future.Kind != DateTimeKind.Utc)
+    throw new InvalidOperationException("Journey action time was not normalized to UTC.");
+var invalidJourneyKeyRejected = false;
+try { CustomerJourneyRules.RequireIdempotencyKey("not-a-guid"); }
+catch (ArgumentException error) when (error.Message == "IDEMPOTENCY_KEY_INVALID") { invalidJourneyKeyRejected = true; }
+if (!invalidJourneyKeyRejected)
+    throw new InvalidOperationException("Journey idempotency validation failed.");
+
+Console.WriteLine("v4.4.0 smoke tests passed.");

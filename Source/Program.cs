@@ -1,6 +1,7 @@
 using DigiAhan.CDR.Receiver.Logging;
 using DigiAhan.CDR.Receiver.Models;
 using DigiAhan.CDR.Receiver.Services;
+using DigiAhan.CDR.Receiver.Features.Journey;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
@@ -10,13 +11,14 @@ using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.12";
-const string BuildDate = "2026-08-11";
+const string AppVersion = "4.4.0";
+const string BuildDate = "2026-08-16";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Voip.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.RecordingIngestion.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.SellerWorkspace.local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddJsonFile("appsettings.JourneyKernel.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile("appsettings.Dashboard.local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile(
     "appsettings.Accounting.local.json",
@@ -53,6 +55,8 @@ builder.Services.AddSingleton<CustomerIntelligenceRepository>();
 builder.Services.AddSingleton<AgentPanelRepository>();
 builder.Services.AddSingleton<SellerWorkspaceAccessService>();
 builder.Services.AddSingleton<SellerWorkspaceRepository>();
+builder.Services.Configure<CustomerJourneyOptions>(builder.Configuration.GetSection("JourneyKernel"));
+builder.Services.AddSingleton<CustomerJourneyRepository>();
 builder.Services.AddHttpClient<LegacyAgentBridgeService>();
 builder.Services.AddSingleton<SalesDashboardRepository>();
 builder.Services.AddSingleton<AccountingSyncService>();
@@ -172,7 +176,8 @@ app.Use(async (context, next) =>
     }
 
     if (context.Request.Path.StartsWithSegments("/dashboard")
-        || context.Request.Path.StartsWithSegments("/ai"))
+        || context.Request.Path.StartsWithSegments("/ai")
+        || context.Request.Path.StartsWithSegments("/journey-control"))
     {
         context.Response.Redirect("/dashboard-login");
         return;
@@ -240,6 +245,7 @@ app.MapGet("/invoice-notifications", () => Results.Redirect("/invoice-notificati
 app.MapGet("/sms-dashboard", () => Results.Redirect("/sms-dashboard/index.html"));
 app.MapGet("/seller-v2", () => Results.Redirect("/seller-v2/index.html"));
 app.MapGet("/seller-admin", () => Results.Redirect("/seller-admin/index.html"));
+app.MapCustomerJourneyEndpoints();
 app.MapGet("/order/{token}", (string token) =>
     PublicTokenService.IsWellFormed(token)
         ? Results.File(Path.Combine(app.Environment.WebRootPath, "order", "index.html"), "text/html; charset=utf-8")
@@ -829,13 +835,16 @@ app.MapPost("/api/seller-v2/interactions", async (
     SellerInteractionRequest request,
     SellerWorkspaceAccessService access,
     SellerWorkspaceRepository workspace,
+    CustomerJourneyRepository journey,
     CancellationToken ct) =>
 {
     var seller = await access.AuthenticateAsync(context, ct);
     if (seller is null) return Results.Unauthorized();
     try
     {
-        return Results.Ok(await workspace.SaveInteractionAsync(seller, request, ct));
+        var result = await workspace.SaveInteractionAsync(seller, request, ct);
+        await journey.CaptureInteractionBestEffortAsync(seller, result.Id, ct);
+        return Results.Ok(result);
     }
     catch (ArgumentException ex)
     {
@@ -1464,9 +1473,11 @@ static bool RequiresDashboardAuthentication(PathString path)
     => path.StartsWithSegments("/dashboard")
        || path.StartsWithSegments("/ai")
        || path.StartsWithSegments("/seller-admin")
+       || path.StartsWithSegments("/journey-control")
        || path.StartsWithSegments("/api/dashboard")
        || path.StartsWithSegments("/api/ai")
        || path.StartsWithSegments("/api/seller-admin")
+       || path.StartsWithSegments("/api/journey-control")
        || path.StartsWithSegments("/api/sales");
 
 static IResult SellerAdminError(Exception exception)
@@ -1532,6 +1543,23 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "Invoice notification schema startup check failed. The application will continue and retry on request.");
+}
+
+if (app.Services.GetRequiredService<IOptions<CustomerJourneyOptions>>().Value.Enabled)
+{
+    try
+    {
+        using var startupScope = app.Services.CreateScope();
+        await startupScope.ServiceProvider.GetRequiredService<SellerWorkspaceRepository>()
+            .EnsureSchemaAsync(CancellationToken.None);
+        await startupScope.ServiceProvider.GetRequiredService<CustomerJourneyRepository>()
+            .EnsureSchemaAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex,
+            "Journey Kernel schema startup check failed. Seller v2 remains available and Journey v3 will retry on request.");
+    }
 }
 
 app.Run();

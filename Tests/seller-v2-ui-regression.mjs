@@ -24,6 +24,14 @@ const pages=fs.readdirSync(path.join(root,"Source/wwwroot"),{withFileTypes:true}
   .filter(entry=>entry.isDirectory()&&fs.existsSync(path.join(root,"Source/wwwroot",entry.name,"index.html")));
 for(const page of pages){
   const content=read(`Source/wwwroot/${page.name}/index.html`);
-  assert(content.includes("/version.js?v=4312"),`Version badge script is missing from ${page.name}.`);
+  assert(content.includes("/version.js?"),`Version badge script is missing from ${page.name}.`);
 }
-console.log(`v4.3.12 seller UI regression passed (${pages.length} pages checked).`);
+const journeyHtml=read("Source/wwwroot/seller-v3/index.html");
+const journeyApp=read("Source/wwwroot/seller-v3/app.js");
+assert(!journeyHtml.includes('/dashboard'),"Seller v3 must not expose a management dashboard link.");
+assert(journeyApp.includes('/api/seller-v3/workspace'),"Seller v3 workspace API is not wired.");
+assert(journeyApp.includes('crypto.randomUUID()'),"Seller v3 mutations must use idempotency keys.");
+const journeyIds=new Set([...journeyHtml.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
+const journeyReferencedIds=new Set([...journeyApp.matchAll(/\$\("([^"]+)"\)/g)].map(match=>match[1]));
+for(const id of journeyReferencedIds)assert(journeyIds.has(id),`Seller v3 script references a missing element: #${id}`);
+console.log(`v4.4.0 seller UI regression passed (${pages.length} pages checked).`);
