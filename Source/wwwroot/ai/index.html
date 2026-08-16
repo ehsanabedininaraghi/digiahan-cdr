@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>هوش مکالمات دیجی‌آهن</title>
-  <link rel="stylesheet" href="style.css?v=4381">
+  <link rel="stylesheet" href="style.css?v=4312">
 </head>
 <body>
 <header class="topbar">
   <div>
     <p class="eyebrow">DigiAhan Conversation Intelligence</p>
-    <h1>هوش مکالمات <span>نسخه آزمایشی</span></h1>
+    <h1>هوش مکالمات <span data-app-version>v4.3.12</span></h1>
     <p>متن تماس، داده‌های استخراج‌شده و موارد نیازمند بررسی انسانی</p>
   </div>
   <a class="back" href="/dashboard">بازگشت به داشبورد</a>
@@ -22,7 +22,7 @@
   <section class="panel access-panel">
     <div>
       <h2>دسترسی و فیلترها</h2>
-      <p>برای ثبت تصمیم روی دیتابیس، توکن API لازم است. تا زمان نصب دیتابیس AI، داده نمونه امن نمایش داده می‌شود.</p>
+      <p>این صفحه فقط داده عملیاتی دیتابیس را نمایش می‌دهد. حالت نمونه صرفاً با افزودن <b dir="ltr">?demo=1</b> فعال می‌شود.</p>
     </div>
     <label>توکن API<input id="apiToken" type="password" autocomplete="off" placeholder="اختیاری در همین سیستم"></label>
     <label>نام بازبین<input id="reviewer" type="text" maxlength="100" placeholder="مثلاً مدیر فروش"></label>
@@ -34,7 +34,7 @@
     <article><span>مکالمه‌های کاری</span><strong id="businessCount">۰</strong><small>قابل تحلیل تجاری</small></article>
     <article class="warning"><span>بازبینی باز</span><strong id="openReviewCount">۰</strong><small>نیازمند تصمیم انسان</small></article>
     <article><span>ورود صدای روزانه</span><strong id="ingestionState">نامشخص</strong><small id="ingestionHint">در حال بررسی</small></article>
-    <article><span>دیتای آزمایشی فعلی</span><strong id="sampleDataCount">۶ تحلیل</strong><small id="sampleDataHint">۵ فایل · ۶:۵۴ دقیقه · ۶٫۳۲ MB</small></article>
+    <article><span>حالت داده</span><strong id="sampleDataCount">عملیاتی</strong><small id="sampleDataHint">نمونه نمایشی خودکار نیست</small></article>
   </section>
 
   <section class="panel filter-panel">
@@ -105,6 +105,7 @@
 </main>
 
 <footer>دیجی‌آهن · داده خام و فایل فیزیکی در مرورگر افشا نمی‌شود · پخش صدا در این مرحله فعال نیست</footer>
-<script src="app.js?v=4382" defer></script>
+<script src="/version.js?v=4312" defer></script>
+<script src="app.js?v=4312" defer></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 using DigiAhan.CDR.Receiver.Services;
+using System.Reflection;
 
 static void Equal(string expected, string? actual, string name)
 {
@@ -20,6 +21,16 @@ if (PublicTokenService.Hash(tokenA).SequenceEqual(PublicTokenService.Hash(tokenB
 
 Equal("09121234567", MappingValueNormalizer.Phone("+98 912 123 4567"), "Iran mobile normalization");
 
+var normalizeSellerPhone = typeof(SellerWorkspaceRepository).GetMethod(
+    "NormalizePhone", BindingFlags.Static | BindingFlags.NonPublic)
+    ?? throw new InvalidOperationException("Seller phone normalizer was not found.");
+Equal("09121234567", normalizeSellerPhone.Invoke(null, new object?[] { "۰۹۱۲ ۱۲۳ ۴۵۶۷" }) as string,
+    "Seller Persian phone normalization");
+Equal("09121234567", normalizeSellerPhone.Invoke(null, new object?[] { "+98 (912) 123-4567" }) as string,
+    "Seller international phone normalization");
+Equal("09121234567", normalizeSellerPhone.Invoke(null, new object?[] { "9121234567" }) as string,
+    "Seller trunk prefix normalization");
+
 var localLookingTimestamp = DateTime.UtcNow.AddMinutes(210).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 var normalizedTimestamp = TehranClock.NormalizeIncomingEventUtc(localLookingTimestamp);
 if (Math.Abs((normalizedTimestamp - DateTime.UtcNow).TotalMinutes) > 2)
@@ -30,4 +41,4 @@ var normalizedUtc = TehranClock.NormalizeIncomingEventUtc(explicitUtc.ToString("
 if (Math.Abs((normalizedUtc - explicitUtc).TotalSeconds) > 2)
     throw new InvalidOperationException("Explicit UTC timestamp changed during normalization.");
 
-Console.WriteLine("v4.3.10 smoke tests passed.");
+Console.WriteLine("v4.3.12 smoke tests passed.");

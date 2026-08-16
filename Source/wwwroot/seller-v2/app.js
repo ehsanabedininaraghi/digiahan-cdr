@@ -1,8 +1,8 @@
 const $=id=>document.getElementById(id);
 const fa=n=>new Intl.NumberFormat("fa-IR",{minimumIntegerDigits:2,useGrouping:false}).format(n);
-let step=1,callInterval=null,callSeconds=0;
+let callInterval=null,callSeconds=0,liveStream=null;
 let authenticated=false,readOnlyCustomer=false,currentCustomerKnown=false;
-let currentCustomerPhone="",currentCallLinkedId=null;
+let currentCustomerPhone="",currentCallLinkedId=null,currentSeller=null,editingInteractionId=null,editingOccurredAtUtc=null;
 let lastLiveEventKey="",lastEnrichedEventKey="",livePollBusy=false,searchTimer=null;
 const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]);
 const newId=()=>{
@@ -11,6 +11,14 @@ const newId=()=>{
   bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
   const hex=[...bytes].map(x=>x.toString(16).padStart(2,"0")).join("");
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+};
+const normalizePhone=value=>{
+  const latin=String(value||"").replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+  let digits=latin.replace(/\D/g,"");
+  if(digits.startsWith("0098"))digits=`0${digits.slice(4)}`;
+  else if(digits.startsWith("98")&&digits.length>=12)digits=`0${digits.slice(2)}`;
+  else if(digits.length===10&&!digits.startsWith("0"))digits=`0${digits}`;
+  return digits;
 };
 
 async function api(path,options={}){
@@ -29,8 +37,6 @@ const toast=message=>{
 function setToday(){
   const text=new Intl.DateTimeFormat("fa-IR",{weekday:"long",day:"numeric",month:"long"}).format(new Date());
   $("todayLabel").textContent=text;
-  const date=new Date();date.setDate(date.getDate()+1);
-  $("followDate").value=formatJalaliDate(date);
 }
 
 function formatJalaliDate(date){
@@ -54,13 +60,26 @@ function jalaliToLocalDate(value){
   return null;
 }
 
-function openDrawer(source="interaction"){
-  if(readOnlyCustomer){toast("پرونده انتخاب‌شده از جست‌وجو فقط برای مشاهده است");return}
-  $("drawerEyebrow").textContent=source==="call"?"تماس پایان یافت · ثبت نتیجه":"ثبت تعامل جدید";
+function resetInteractionForm(){
+  $("interactionForm").reset();
+  editingInteractionId=null;editingOccurredAtUtc=null;
+  $("saveInteraction").textContent="ثبت نتیجه مکالمه";
+  updateConditionalFields();
+}
+
+function openDrawer(source="interaction",preserveForm=false,allowReadOnly=false){
+  if(readOnlyCustomer&&!allowReadOnly){toast("پرونده انتخاب‌شده از جست‌وجو فقط برای مشاهده است");return}
+  const phone=normalizePhone(currentCustomerPhone);
+  if(phone.length<7){toast("ابتدا یک تماس واقعی یا مشتری را انتخاب کنید");return}
+  if(!preserveForm)resetInteractionForm();
+  const customer=$("customerName").textContent||$("contactName").textContent||"مشتری";
+  $("drawerEyebrow").textContent=source==="call"?"تماس پایان یافت · ثبت نتیجه":source==="edit"?"اصلاح تعامل ثبت‌شده":"ثبت تعامل جدید";
+  $("interactionDrawerTitle").textContent=`نتیجه مکالمه با ${customer}`;
+  $("interactionPhone").textContent=phone;
   $("drawerBackdrop").classList.remove("hidden");
   $("interactionDrawer").classList.remove("hidden");
   document.body.style.overflow="hidden";
-  setStep(1);
+  $("interactionDrawer").querySelector("form").scrollTop=0;
 }
 
 function closeDrawer(){
@@ -112,22 +131,16 @@ async function archiveCustomer(){
   catch(error){toast(error.message)}
 }
 
-function setStep(value){
-  step=Math.min(3,Math.max(1,value));
-  document.querySelectorAll(".form-step").forEach(el=>el.classList.toggle("active",Number(el.dataset.step)===step));
-  document.querySelectorAll(".drawer-progress i").forEach((el,index)=>el.classList.toggle("active",index<step));
-  const labels=["نیاز مشتری","اقدامات انجام‌شده","نتیجه و اقدام بعدی"];
-  $("stepLabel").textContent=`${fa(step)} از ۳ · ${labels[step-1]}`;
-  $("prevStep").classList.toggle("hidden",step===1);
-  $("nextStep").classList.toggle("hidden",step===3);
-  $("saveInteraction").classList.toggle("hidden",step!==3);
-  $("interactionDrawer").querySelector("form").scrollTop=0;
-}
-
 function updateConditionalFields(){
   const outcome=document.querySelector('input[name="outcome"]:checked')?.value;
   $("followUpFields").classList.toggle("hidden",outcome!=="FOLLOW_UP");
   $("lossFields").classList.toggle("hidden",outcome!=="LOST");
+  $("nonSalesFields").classList.toggle("hidden",outcome!=="NON_SALES");
+  $("salesDetails").classList.toggle("hidden",!outcome||outcome==="NON_SALES");
+  if(outcome==="FOLLOW_UP"&&!$("followDate").value){
+    const date=new Date();date.setDate(date.getDate()+1);$("followDate").value=formatJalaliDate(date);
+    $("followTime").value="10:30";
+  }
 }
 
 function startCall(){
@@ -140,7 +153,7 @@ function startCall(){
     $("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`;
   },1000);
   window.scrollTo({top:document.querySelector(".content-grid").offsetTop-100,behavior:"smooth"});
-  toast("تماس ورودی آریا سازه متصل شد");
+  toast(`تماس ${$("customerName").textContent||currentCustomerPhone||"آزمایشی"} متصل شد`);
 }
 
 function endCall(){
@@ -169,7 +182,9 @@ function showLiveCall(card,publishedAtUtc,serverNowUtc){
     lastEnrichedEventKey=key;loadWorkspace(card.callerNumber).catch(console.error);
   }
   if(!isNew)return;
+  clearInterval(callInterval);callInterval=null;
   $("activeCallCard").classList.remove("hidden");
+  $("liveCallIdentity").textContent=`${card.customerName||card.companyName||"مشتری جدید"} · ${card.callerNumber}`;
   $("simulateCall").disabled=true;$("simulateCall").innerHTML="<span>●</span> تماس واقعی";
   callSeconds=Math.max(0,Math.floor(age/1000));
   if(!callInterval)callInterval=setInterval(()=>{callSeconds++;$("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`},1000);
@@ -183,37 +198,46 @@ async function pollLiveCall(){
   finally{livePollBusy=false}
 }
 
+function startLiveEvents(){
+  if(!authenticated||location.protocol==="file:"||typeof EventSource==="undefined")return;
+  if(liveStream)liveStream.close();
+  liveStream=new EventSource("/api/seller-v2/live-events",{withCredentials:true});
+  liveStream.addEventListener("call",event=>{
+    try{const data=JSON.parse(event.data);showLiveCall(data.card,data.publishedAtUtc,data.serverNowUtc)}catch(error){console.warn(error)}
+  });
+  liveStream.onerror=()=>{if(authenticated)setTimeout(pollLiveCall,500)};
+}
+
 async function saveInteraction(){
   const outcome=document.querySelector('input[name="outcome"]:checked')?.value;
+  const phone=normalizePhone(currentCustomerPhone);
+  if(phone.length<7){toast("شماره مشتری معتبر نیست؛ یک تماس یا مشتری واقعی را انتخاب کنید");return}
+  if(!outcome){toast("نتیجه مکالمه را انتخاب کنید");return}
   if(outcome==="FOLLOW_UP"&&!$("followDate").value){toast("تاریخ پیگیری را مشخص کنید");return}
   if(outcome==="LOST"&&!document.querySelector('input[name="loss"]:checked')){toast("دلیل عدم خرید را انتخاب کنید");return}
   const labels={ORDER:"سفارش ثبت شد",DECIDING:"در حال تصمیم‌گیری",FOLLOW_UP:"پیگیری ثبت شد",LOST:"عدم خرید ثبت شد",NON_SALES:"تماس غیر فروش ثبت شد"};
   if(location.protocol!=="file:"){
-    const checks=[...document.querySelectorAll(".check-grid input")];
-    const actionCodes=["PRICE_QUOTED","STOCK_CHECKED","PAYMENT_EXPLAINED","ALTERNATIVE_OFFERED"];
-    const date=jalaliToLocalDate($("followDate").value),time=document.querySelector('#followUpFields input[type="time"]').value;
+    const date=jalaliToLocalDate($("followDate").value),time=$("followTime").value;
     if(outcome==="FOLLOW_UP"&&!date){toast("تاریخ شمسی را به شکل ۱۴۰۵/۰۵/۲۰ وارد کنید");return}
-    const payload={idempotencyKey:newId(),customerPhone:currentCustomerPhone,callLinkedId:currentCallLinkedId,
-      productName:$("product").value,productSize:$("size").value,productBrand:document.querySelector('.form-step[data-step="1"] select:nth-of-type(3)')?.value||null,
-      quantity:Number(document.querySelector('.compound-input input').value)||null,quantityUnit:document.querySelector('.compound-input select').value,
-      actions:checks.flatMap((item,index)=>item.checked?[actionCodes[index]]:[]),outcome,
+    if(outcome==="FOLLOW_UP"&&(!time||!$("followSubject").value.trim())){toast("ساعت و دلیل پیگیری را مشخص کنید");return}
+    const nonSalesReason=document.querySelector('input[name="nonSalesReason"]:checked')?.value;
+    let note=$("interactionNote").value.trim();
+    if(outcome==="NON_SALES"&&nonSalesReason)note=`[نوع تماس: ${nonSalesReason}]${note?` ${note}`:""}`;
+    const payload={idempotencyKey:newId(),customerPhone:phone,callLinkedId:currentCallLinkedId,occurredAtUtc:editingOccurredAtUtc,
+      productName:outcome!=="NON_SALES"?$("product").value||null:null,productSize:outcome!=="NON_SALES"?$("size").value.trim()||null:null,productBrand:outcome!=="NON_SALES"?$("brand").value.trim()||null:null,
+      quantity:outcome!=="NON_SALES"&&$("quantity").value!==""?Number($("quantity").value):null,quantityUnit:outcome!=="NON_SALES"?$("quantityUnit").value||null:null,
+      actions:outcome!=="NON_SALES"?[...document.querySelectorAll("[data-action]:checked")].map(item=>item.dataset.action):[],outcome,
       lossReason:outcome==="LOST"?document.querySelector('input[name="loss"]:checked')?.value:null,
       followUpAtUtc:outcome==="FOLLOW_UP"?new Date(date.getFullYear(),date.getMonth(),date.getDate(),Number(time.split(":")[0]),Number(time.split(":")[1])).toISOString():null,
-      followUpSubject:outcome==="FOLLOW_UP"?document.querySelector('#followUpFields input[type="text"]').value:null,
-      note:document.querySelector('.full-field textarea').value||null};
+      followUpSubject:outcome==="FOLLOW_UP"?$("followSubject").value.trim():null,note:note||null};
     $("saveInteraction").disabled=true;$("saveInteraction").textContent="در حال ثبت…";
-    try{await api("/api/seller-v2/interactions",{method:"POST",body:JSON.stringify(payload)})}
+    const endpoint=editingInteractionId?`/api/seller-v2/interactions/${editingInteractionId}`:"/api/seller-v2/interactions";
+    try{await api(endpoint,{method:editingInteractionId?"PUT":"POST",body:JSON.stringify(payload)})}
     catch(error){toast(error.message==="UNAUTHORIZED"?"دسترسی منقضی شده است":error.message);return}
     finally{$("saveInteraction").disabled=false;$("saveInteraction").textContent="ثبت نتیجه مکالمه"}
   }
   closeDrawer();toast(`${labels[outcome]}؛ اطلاعات با موفقیت ذخیره شد`);
-  const timeline=$("timeline");
-  const item=document.createElement("article");
-  item.className="timeline-item mine";item.dataset.kind="mine";
-  item.innerHTML=`<div class="timeline-icon follow">✓</div><div class="timeline-content"><header><div><b>${labels[outcome]}</b><span>همین حالا · توسط حسنا مظاهری</span></div><time>اکنون</time></header><p>۲۰ تن تیرآهن سایز ۱۶ ذوب‌آهن؛ قیمت و موجودی بررسی شد.</p><div class="tag-row"><span>تیرآهن ۱۶</span><span class="blue-tag">تعامل جدید</span></div></div>`;
-  const firstItem=timeline.querySelector(".timeline-item");
-  timeline.insertBefore(item,firstItem);
-  if(location.protocol!=="file:")loadWorkspace(currentCustomerPhone).catch(console.error);
+  if(location.protocol!=="file:")await loadWorkspace(phone);
 }
 
 function formatDate(value){return new Intl.DateTimeFormat("fa-IR-u-ca-persian",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Tehran"}).format(new Date(value))}
@@ -228,12 +252,33 @@ function renderBalance(value,creditLimit){
 }
 function outcomeLabel(value){return({ORDER:"سفارش ثبت شد",DECIDING:"در حال تصمیم‌گیری",FOLLOW_UP:"نیاز به پیگیری",LOST:"خرید انجام نشد",NON_SALES:"تماس غیر فروش"})[value]||value}
 
+async function editInteraction(id){
+  try{
+    const item=await api(`/api/seller-v2/interactions/${id}`);
+    currentCustomerPhone=item.customerPhone;currentCallLinkedId=item.callLinkedId||null;
+    editingInteractionId=item.id;editingOccurredAtUtc=item.occurredAtUtc;
+    $("interactionForm").reset();
+    document.querySelector(`input[name="outcome"][value="${item.outcome}"]`)?.click();
+    $("product").value=item.productName||"";$("size").value=item.productSize||"";$("brand").value=item.productBrand||"";
+    $("quantity").value=item.quantity??"";$("quantityUnit").value=item.quantityUnit||"";
+    (item.actions||[]).forEach(action=>{const input=document.querySelector(`[data-action="${action}"]`);if(input)input.checked=true});
+    if(item.lossReason){const input=document.querySelector(`input[name="loss"][value="${item.lossReason}"]`);if(input)input.checked=true}
+    if(item.followUpAtUtc){const due=new Date(item.followUpAtUtc);$("followDate").value=formatJalaliDate(due);$("followTime").value=new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Tehran"}).format(due)}
+    $("followSubject").value=item.followUpSubject||"";
+    let note=item.note||"";const reason=note.match(/^\[نوع تماس: ([^\]]+)\]\s*/);
+    if(reason){const input=[...document.querySelectorAll('input[name="nonSalesReason"]')].find(x=>x.value===reason[1]);if(input)input.checked=true;note=note.slice(reason[0].length)}
+    $("interactionNote").value=note;
+    updateConditionalFields();openDrawer("edit",true,true);$("saveInteraction").textContent="ذخیره اصلاحات";
+  }catch(error){toast(error.message)}
+}
+
 async function loadWorkspace(phone="",lookupOnly=false){
   const data=await api(`/api/seller-v2/workspace${phone?`?phone=${encodeURIComponent(phone)}&readOnly=${lookupOnly?"true":"false"}`:""}`);
-  const seller=data.seller,stats=data.stats,card=data.customer;
+  const seller=data.seller,stats=data.stats,card=data.customer;currentSeller=seller;
   authenticated=true;readOnlyCustomer=Boolean(data.readOnlyCustomer);
   $("sidebarSellerName").textContent=seller.displayName;$("welcomeName").textContent=seller.displayName.split(" ")[0];
   $("sidebarSellerExtension").textContent=`کارشناس فروش · داخلی ${seller.extensions.join(" و ")}`;
+  $("sidebarAvatar").textContent=seller.displayName.split(/\s+/).slice(0,2).map(x=>x[0]||"").join("");
   $("statOverdue").textContent=stats.overdue;$("statDue").textContent=stats.dueToday;$("statConversations").textContent=stats.conversations;
   $("statPriced").textContent=stats.priced;$("statOrders").textContent=stats.orders;$("statLost").textContent=`${stats.lost} عدم خرید`;
   $("missingResults").textContent=`${stats.missingResults} نتیجه ناقص`;
@@ -243,11 +288,12 @@ async function loadWorkspace(phone="",lookupOnly=false){
   $("qualityMissing").textContent=stats.missingResults.toLocaleString("fa-IR");
   $("qualityMissingRow").classList.toggle("done",stats.missingResults===0);
   $("qualityMissingRow").classList.toggle("warning",stats.missingResults>0);
+  $("navTaskCount").textContent=(stats.dueToday+stats.overdue).toLocaleString("fa-IR");
   $("readOnlyNotice").classList.toggle("hidden",!readOnlyCustomer);
   $("newInteraction").disabled=readOnlyCustomer;
   $("newInteraction").title=readOnlyCustomer?"نتیجه جست‌وجو فقط برای مشاهده است":"ثبت تعامل";
   if(card){
-    currentCustomerPhone=card.callerNumber;currentCallLinkedId=card.linkedId;currentCustomerKnown=Boolean(card.isKnownCustomer);
+    currentCustomerPhone=normalizePhone(card.callerNumber);currentCallLinkedId=card.linkedId;currentCustomerKnown=Boolean(card.isKnownCustomer);
     $("customerName").textContent=card.companyName||card.customerName||"مشتری جدید";$("contactName").textContent=card.customerName||"نام ثبت نشده";
     $("customerPhone").textContent=card.callerNumber;$("customerState").textContent=card.isKnownCustomer?"مشتری فعال":"مشتری جدید";
     $("customerOwner").textContent=card.ownerName||"ثبت نشده";$("identitySource").textContent=card.identitySource||"نامشخص";
@@ -257,9 +303,12 @@ async function loadWorkspace(phone="",lookupOnly=false){
     $("snapshotLastProduct").textContent=card.lastProduct||"بدون خرید ثبت‌شده";$("snapshotInvoices").textContent=(card.invoiceCount30Days||0).toLocaleString("fa-IR");
     $("snapshotSales").textContent=money(card.sales30Days);
     renderBalance(card.accountBalance,card.creditLimit);
+    const avatar=(card.customerName||card.companyName||"؟").split(/\s+/).slice(0,2).map(x=>x[0]||"").join("");$("customerAvatar").textContent=avatar||"؟";
   }else{
-    currentCustomerKnown=false;
+    currentCustomerPhone="";currentCallLinkedId=null;currentCustomerKnown=false;
     $("customerName").textContent="آماده دریافت تماس";$("contactName").textContent="تماس جدید به‌صورت خودکار نمایش داده می‌شود";$("customerPhone").textContent="—";
+    $("customerState").textContent="بدون تماس فعال";$("customerOwner").textContent="—";$("identitySource").textContent="—";$("mainInterest").textContent="—";$("customerCode").textContent="—";
+    $("snapshotLastCall").textContent="—";$("snapshotCallCount").textContent="بدون سابقه";$("snapshotLastPurchase").textContent="—";$("snapshotLastProduct").textContent="بدون خرید ثبت‌شده";$("snapshotInvoices").textContent="۰";$("snapshotSales").textContent="۰";$("customerAvatar").textContent="؟";
     renderBalance(null,null);
   }
   if(data.followUps.length){
@@ -268,14 +317,14 @@ async function loadWorkspace(phone="",lookupOnly=false){
     const next=data.followUps[0],due=new Date(next.dueAtUtc);$("nextActionCard").classList.remove("hidden");$("nextSubject").textContent=next.subject;$("nextCustomer").textContent=next.customerDisplayName;
     $("nextDay").textContent=new Intl.DateTimeFormat("fa-IR-u-ca-persian",{month:"short",day:"numeric",timeZone:"Asia/Tehran"}).format(due);$("nextTime").textContent=new Intl.DateTimeFormat("fa-IR",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Tehran"}).format(due);$("nextStatus").textContent=due<new Date()?"عقب‌افتاده":"برنامه‌ریزی‌شده";
   }else{$("followUpList").innerHTML='<div class="empty-list">پیگیری بازی ندارید.</div>';$("nextActionCard").classList.add("hidden")}
-  $("timeline").innerHTML=data.timeline.length?`<div class="day-label"><span>سابقه ثبت‌شده</span></div>`+data.timeline.map(x=>`<article class="timeline-item ${x.isMine?"mine":"others"}" data-kind="${x.outcome==="ORDER"?"orders":x.isMine?"mine":"others"}"><div class="timeline-icon ${x.eventType==="CALL"?"quote":x.outcome==="LOST"?"lost":x.outcome==="ORDER"?"order":"follow"}">${x.eventType==="CALL"?"☎":x.outcome==="ORDER"?"▣":x.outcome==="LOST"?"×":"↗"}</div><div class="timeline-content"><header><div><b>${esc(x.title||outcomeLabel(x.outcome)||"تماس تلفنی")}</b><span>${esc(x.sellerDisplayName)}</span></div><time>${formatDate(x.eventAtUtc)}</time></header><p>${esc(x.description||"بدون توضیح")}</p><div class="tag-row">${x.productName?`<span>${esc(x.productName)} ${esc(x.productSize||"")}</span>`:""}${x.lossReason?`<span class="red-tag">${esc(x.lossReason)}</span>`:""}</div></div></article>`).join(""):'<div class="empty-list">هنوز سابقه‌ای برای این مشتری ثبت نشده است.</div>';
+  $("timeline").innerHTML=data.timeline.length?`<div class="day-label"><span>سابقه ثبت‌شده</span></div>`+data.timeline.map(x=>`<article class="timeline-item ${x.isMine?"mine":"others"}" data-kind="${x.outcome==="ORDER"?"orders":x.isMine?"mine":"others"}"><div class="timeline-icon ${x.eventType==="CALL"?"quote":x.outcome==="LOST"?"lost":x.outcome==="ORDER"?"order":"follow"}">${x.eventType==="CALL"?"☎":x.outcome==="ORDER"?"▣":x.outcome==="LOST"?"×":"↗"}</div><div class="timeline-content"><header><div><b>${esc(x.title||outcomeLabel(x.outcome)||"تماس تلفنی")}</b><span>${esc(x.sellerDisplayName)}</span></div><time>${formatDate(x.eventAtUtc)}</time></header><p>${esc(x.description||"بدون توضیح")}</p><div class="tag-row">${x.productName?`<span>${esc(x.productName)} ${esc(x.productSize||"")}</span>`:""}${x.lossReason?`<span class="red-tag">${esc(x.lossReason)}</span>`:""}${x.eventType==="INTERACTION"&&x.isMine?`<button type="button" class="edit-interaction" data-edit-interaction="${x.id}">اصلاح نتیجه</button>`:""}</div></div></article>`).join(""):'<div class="empty-list">هنوز سابقه‌ای برای این مشتری ثبت نشده است.</div>';
   $("accessGate").classList.add("hidden");
-  pollLiveCall();
+  pollLiveCall();startLiveEvents();
 }
 
 async function searchCustomers(query){
   query=String(query||"").trim();
-  if(query.length<2){$("searchResults").classList.add("hidden");$("searchResults").innerHTML="";return}
+  if(query.length<1){$("searchResults").classList.add("hidden");$("searchResults").innerHTML="";return}
   const rows=await api(`/api/seller-v2/customers/search?q=${encodeURIComponent(query)}&take=20`);
   $("searchResults").innerHTML=rows.length?rows.map(x=>`<button type="button" data-customer-phone="${esc(x.phone)}"><span><b>${esc(x.displayName)}</b>${x.companyName&&x.companyName!==x.displayName?`<small>${esc(x.companyName)}</small>`:""}</span><em dir="ltr">${esc(x.mobilePhones||x.phone)}</em></button>`).join(""):'<div class="search-empty">مشتری‌ای پیدا نشد</div>';
   $("searchResults").classList.remove("hidden");
@@ -308,6 +357,7 @@ document.querySelectorAll(".segmented-control button").forEach(button=>button.ad
   document.querySelectorAll(".timeline-item").forEach(item=>item.classList.toggle("hidden",button.dataset.filter!=="all"&&item.dataset.kind!==button.dataset.filter));
 }));
 document.querySelectorAll('input[name="outcome"]').forEach(input=>input.addEventListener("change",updateConditionalFields));
+$("timeline").addEventListener("click",event=>{const button=event.target.closest("[data-edit-interaction]");if(button)editInteraction(Number(button.dataset.editInteraction))});
 document.querySelectorAll(".nav-item").forEach(button=>button.addEventListener("click",()=>{
   document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));button.classList.add("active");
   if(button.dataset.view==="tasks")document.querySelector(".task-panel").scrollIntoView({behavior:"smooth",block:"start"});
@@ -324,8 +374,6 @@ $("saveCustomer").addEventListener("click",saveCustomer);
 $("archiveCustomer").addEventListener("click",archiveCustomer);
 $("closeDrawer").addEventListener("click",closeDrawer);
 $("drawerBackdrop").addEventListener("click",()=>{closeDrawer();closeCustomerDrawer()});
-$("nextStep").addEventListener("click",()=>setStep(step+1));
-$("prevStep").addEventListener("click",()=>setStep(step-1));
 $("saveInteraction").addEventListener("click",saveInteraction);
 $("simulateCall").addEventListener("click",startCall);
 $("endCall").addEventListener("click",endCall);
@@ -340,7 +388,7 @@ $("completeTask").addEventListener("click",async event=>{
   event.currentTarget.textContent="✓ تکمیل شد";event.currentTarget.disabled=true;toast("پیگیری با موفقیت انجام شد");
 });
 $("loadMore").addEventListener("click",event=>{event.currentTarget.textContent="تمام سوابق نمایش داده شده است";event.currentTarget.disabled=true});
-$("globalSearch").addEventListener("input",event=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>searchCustomers(event.currentTarget.value).catch(error=>toast(error.message)),250)});
+$("globalSearch").addEventListener("input",event=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>searchCustomers(event.currentTarget.value).catch(error=>toast(error.message)),180)});
 $("globalSearch").addEventListener("keydown",event=>{if(event.key==="Escape")$("searchResults").classList.add("hidden")});
 document.addEventListener("keydown",event=>{
   if(event.key==="Escape"){closeDrawer();closeCustomerDrawer()}
@@ -358,13 +406,16 @@ $("accessForm").addEventListener("submit",async event=>{
 
 $("logoutButton").addEventListener("click",async()=>{
   try{await api("/api/seller-v2/logout",{method:"POST"})}catch{}
+  if(liveStream)liveStream.close();
   authenticated=false;location.reload();
 });
 $("completeMissing").addEventListener("click",()=>showMissingResults().catch(error=>toast(error.message)));
 
-setToday();updateConditionalFields();
+setToday();resetInteractionForm();
 if(location.protocol!=="file:"){
   $("simulateCall").classList.add("hidden");
   api("/api/seller-v2/session").then(()=>{authenticated=true;return loadWorkspace()}).catch(error=>{if(error.message!=="UNAUTHORIZED")toast("ارتباط با سرویس برقرار نشد")});
 }else $("accessGate").classList.add("hidden");
-setInterval(pollLiveCall,2500);
+setInterval(pollLiveCall,10000);
+window.addEventListener("focus",pollLiveCall);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollLiveCall()});

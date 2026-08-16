@@ -1,11 +1,13 @@
 param(
-    [string]$RepositoryRoot = "D:\DigiAhan\CDR4.0"
+    [string]$RepositoryRoot = "D:\DigiAhan\CDR4.0",
+    [string]$ReleaseVersion = "4.3.11",
+    [switch]$ResetDashboardPassword
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$version = "4.3.11"
+$version = $ReleaseVersion
 $payloadRoot = Join-Path $PSScriptRoot "payload"
 $sourceRoot = Join-Path $RepositoryRoot "Source"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -95,6 +97,7 @@ $relativeFiles = @(
     "Source\wwwroot\seller-admin\app.js",
     "Source\wwwroot\seller-admin\index.html",
     "Source\wwwroot\seller-admin\style.css",
+    "Source\wwwroot\version.js",
     "tools\accounting-bridge-v4.3.10.ps1",
     "tools\ai\transcribe_sample.py"
 )
@@ -164,24 +167,35 @@ try {
     }
 
     $dashboardConfigPath = Join-Path $sourceRoot "appsettings.Dashboard.local.json"
-    Write-Host "Set or reset the private management-dashboard password (minimum 8 characters)." -ForegroundColor Yellow
-    $securePassword = Read-Host "Dashboard password" -AsSecureString
-    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-    try { $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
-    if ([string]::IsNullOrWhiteSpace($plainPassword) -or $plainPassword.Length -lt 8) {
-        throw "Dashboard password must contain at least 8 characters."
+    $passwordHash = $null
+    if ((Test-Path -LiteralPath $dashboardConfigPath) -and -not $ResetDashboardPassword) {
+        $dashboardConfig = Get-Content -LiteralPath $dashboardConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $passwordHash = [string]$dashboardConfig.DashboardAccess.PasswordHash
+        if ($passwordHash -notmatch '^[A-Fa-f0-9]{64}$') { $passwordHash = $null }
     }
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try {
-        $passwordBytes = [Text.Encoding]::UTF8.GetBytes($plainPassword)
-        $passwordHash = -join ($sha.ComputeHash($passwordBytes) | ForEach-Object { $_.ToString("X2") })
+    if ([string]::IsNullOrWhiteSpace($passwordHash)) {
+        Write-Host "Set the private management-dashboard password (minimum 8 characters)." -ForegroundColor Yellow
+        $securePassword = Read-Host "Dashboard password" -AsSecureString
+        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+        try { $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
+        if ([string]::IsNullOrWhiteSpace($plainPassword) -or $plainPassword.Length -lt 8) {
+            throw "Dashboard password must contain at least 8 characters."
+        }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $passwordBytes = [Text.Encoding]::UTF8.GetBytes($plainPassword)
+            $passwordHash = -join ($sha.ComputeHash($passwordBytes) | ForEach-Object { $_.ToString("X2") })
+        }
+        finally { $sha.Dispose(); $plainPassword = $null }
+        @{ DashboardAccess = @{ PasswordHash = $passwordHash } } |
+            ConvertTo-Json -Depth 3 |
+            Set-Content -LiteralPath $dashboardConfigPath -Encoding UTF8
+        Write-Host "Dashboard password created; only its hash was saved." -ForegroundColor Green
     }
-    finally { $sha.Dispose(); $plainPassword = $null }
-    @{ DashboardAccess = @{ PasswordHash = $passwordHash } } |
-        ConvertTo-Json -Depth 3 |
-        Set-Content -LiteralPath $dashboardConfigPath -Encoding UTF8
-    Write-Host "Dashboard password reset; only its hash was saved." -ForegroundColor Green
+    else {
+        Write-Host "Existing dashboard password was preserved." -ForegroundColor Green
+    }
 
     $mappingPath = Join-Path $sourceRoot "config\mappingfile.xlsx"
     if (-not (Test-Path -LiteralPath $mappingPath)) {
@@ -272,6 +286,15 @@ try {
         throw "Seller user management page verification failed."
     }
     $sellerUsers = Invoke-RestMethod "http://localhost:5088/api/seller-admin/users" -WebSession $adminSession -TimeoutSec 60
+    $sellerPage = Invoke-WebRequest "http://localhost:5088/seller-v2/index.html" -UseBasicParsing -TimeoutSec 30
+    if ($sellerPage.Content -match 'شرکت ساختمانی آریا سازه|علی احمدی|value="20"' -or
+        $sellerPage.Content -notmatch 'id="interactionDrawerTitle"') {
+        throw "Seller workspace regression verification failed."
+    }
+    $versionScript = Invoke-WebRequest "http://localhost:5088/version.js" -UseBasicParsing -TimeoutSec 30
+    if ($versionScript.StatusCode -ne 200 -or $versionScript.Content -notmatch [regex]::Escape($version)) {
+        throw "Global version badge verification failed."
+    }
     $actualVersion = (Invoke-RestMethod "http://localhost:5088/api/version" -TimeoutSec 10).version
     if ($actualVersion -ne $version) { throw "Unexpected running version: $actualVersion" }
 

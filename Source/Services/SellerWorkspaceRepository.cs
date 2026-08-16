@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DigiAhan.CDR.Receiver.Models;
@@ -112,10 +113,14 @@ public sealed class SellerWorkspaceRepository
         string? query, int take, CancellationToken ct)
     {
         await EnsureSchemaAsync(ct);
-        query = (query ?? string.Empty).Trim();
-        if (query.Length < 2) return Array.Empty<SellerCustomerSearchRow>();
+        query = NormalizeSearchText(query);
+        if (query.Length < 1) return Array.Empty<SellerCustomerSearchRow>();
         take = Math.Clamp(take, 1, 30);
-        const string sql = """
+        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
+        var tokenWhere = string.Join(" AND ", tokens.Select((_, index) =>
+            $"REPLACE(REPLACE(CONCAT(ISNULL(i.DisplayName,N''),N' ',ISNULL(i.CompanyName,N'')),N'ي',N'ی'),N'ك',N'ک') LIKE N'%'+@token{index}+N'%'"));
+        var sql = $"""
         SELECT TOP(@take)
           i.IdentityId,
           COALESCE(primaryPhone.NormalizedPhone,anyPhone.NormalizedPhone),
@@ -146,15 +151,14 @@ public sealed class SellerWorkspaceRepository
         WHERE ISNULL(i.IsActive,1)=1
           AND
           (
-            i.DisplayName LIKE N'%'+@query+N'%'
-            OR i.CompanyName LIKE N'%'+@query+N'%'
-            OR EXISTS
+            ({tokenWhere})
+            OR (@phone<>N'' AND EXISTS
             (
               SELECT 1 FROM dbo.CustomerIdentityPhones p
               WHERE p.IdentityId=i.IdentityId
-                AND (p.NormalizedPhone LIKE N'%'+dbo.NormalizeIranPhone(@query)+N'%'
+                AND (p.NormalizedPhone LIKE N'%'+@phone+N'%'
                      OR p.RawPhone LIKE N'%'+@query+N'%')
-            )
+            ))
           )
         ORDER BY
           CASE WHEN i.DisplayName=@query OR i.CompanyName=@query THEN 0
@@ -166,6 +170,9 @@ public sealed class SellerWorkspaceRepository
         await using var command = new SqlCommand(sql, connection) { CommandTimeout = 15 };
         command.Parameters.Add("@take", SqlDbType.Int).Value = take;
         command.Parameters.Add("@query", SqlDbType.NVarChar, 200).Value = query;
+        command.Parameters.Add("@phone", SqlDbType.NVarChar, 32).Value = Regex.IsMatch(query, @"\d") ? NormalizePhone(query) : string.Empty;
+        for (var index = 0; index < tokens.Length; index++)
+            command.Parameters.Add($"@token{index}", SqlDbType.NVarChar, 100).Value = tokens[index];
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -413,11 +420,9 @@ public sealed class SellerWorkspaceRepository
         (
           SELECT r.* FROM dbo.RawCDR r
           INNER JOIN CustomerPhoneVariants p ON p.Phone=r.Src
-          WHERE r.ReceivedAtUtc>=DATEADD(month,-6,SYSUTCDATETIME())
           UNION
           SELECT r.* FROM dbo.RawCDR r
           INNER JOIN CustomerPhoneVariants p ON p.Phone=r.Dst
-          WHERE r.ReceivedAtUtc>=DATEADD(month,-6,SYSUTCDATETIME())
         ),
         Events AS
         (
@@ -475,7 +480,60 @@ public sealed class SellerWorkspaceRepository
             rows.Add(new(reader.GetInt64(0), reader.GetString(1), TehranClock.AsUtc(reader.GetDateTime(2)), reader.GetString(3),
                 reader.GetString(4), GetString(reader, 5), GetString(reader, 6), GetString(reader, 7),
                 GetDecimal(reader, 8), GetString(reader, 9), GetString(reader, 10), GetString(reader, 11), reader.GetBoolean(12)));
-        return rows;
+        await reader.DisposeAsync();
+
+        const string invoiceSql = """
+        SELECT TOP(@take) i.FactorCode,i.FactorDate,i.FactorNumber,i.TypeDescription,
+          i.FactorDescription,i.Amount,i.VisitorName,i.ImportedAtUtc,products.ProductNames
+        FROM dbo.AccountingInvoices i
+        INNER JOIN dbo.CustomerIdentityAccountingLinks link
+          ON link.SourceDatabase=i.SourceDatabase AND link.FiscalYear=i.FiscalYear
+         AND link.DetailCode=i.CustomerDetailCode
+        OUTER APPLY
+        (
+          SELECT STRING_AGG(CAST(x.ProductName AS nvarchar(max)),N'، ') ProductNames
+          FROM
+          (
+            SELECT DISTINCT COALESCE(NULLIF(item.ProductName,N''),NULLIF(item.Description,N'')) ProductName
+            FROM dbo.AccountingInvoiceItems item
+            WHERE item.SourceDatabase=i.SourceDatabase AND item.FiscalYear=i.FiscalYear
+              AND item.FactorCode=i.FactorCode
+          ) x
+          WHERE x.ProductName IS NOT NULL
+        ) products
+        WHERE link.IdentityId=
+        (
+          SELECT TOP(1) IdentityId FROM dbo.CustomerIdentityPhones
+          WHERE NormalizedPhone=dbo.NormalizeIranPhone(@phone)
+          ORDER BY IsVerified DESC,Priority,Id
+        )
+        ORDER BY i.FactorDate DESC,i.FactorCode DESC;
+        """;
+        await using var invoiceCommand = new SqlCommand(invoiceSql, connection) { CommandTimeout = 15 };
+        invoiceCommand.Parameters.Add("@take", SqlDbType.Int).Value = Math.Clamp(take, 1, 100);
+        invoiceCommand.Parameters.Add("@phone", SqlDbType.NVarChar, 32).Value = phone;
+        await using var invoiceReader = await invoiceCommand.ExecuteReaderAsync(ct);
+        while (await invoiceReader.ReadAsync(ct))
+        {
+            var factorDate = GetString(invoiceReader, 1);
+            var factorNumber = invoiceReader.IsDBNull(2) ? invoiceReader.GetInt32(0).ToString(CultureInfo.InvariantCulture) :
+                Convert.ToDecimal(invoiceReader[2], CultureInfo.InvariantCulture).ToString("0", CultureInfo.InvariantCulture);
+            var products = GetString(invoiceReader, 8);
+            var descriptionParts = new[]
+            {
+                products,
+                GetString(invoiceReader, 4),
+                invoiceReader.IsDBNull(5) ? null : $"مبلغ: {invoiceReader.GetDecimal(5):N0} ریال"
+            }.Where(value => !string.IsNullOrWhiteSpace(value));
+            rows.Add(new SellerTimelineRow(
+                -2_000_000_000L - invoiceReader.GetInt32(0), "INVOICE",
+                PersianDateToUtc(factorDate) ?? TehranClock.AsUtc(invoiceReader.GetDateTime(7)),
+                GetString(invoiceReader, 6) ?? "حسابداری",
+                $"فاکتور فروش {factorNumber}", string.Join(" · ", descriptionParts),
+                products, null, null, null, "ORDER", null, false));
+        }
+        return rows.OrderByDescending(value => value.EventAtUtc).ThenByDescending(value => value.Id)
+            .Take(Math.Clamp(take, 1, 100)).ToArray();
     }
 
     public async Task<SellerInteractionResult> SaveInteractionAsync(
@@ -543,6 +601,115 @@ public sealed class SellerWorkspaceRepository
             return new(interactionId, normalized.Key.ToString(), false, created);
         }
         catch { await transaction.RollbackAsync(CancellationToken.None); throw; }
+    }
+
+    public async Task<SellerInteractionEditResponse?> GetInteractionAsync(
+        SellerIdentity seller, long id, CancellationToken ct)
+    {
+        await EnsureSchemaAsync(ct);
+        const string sql = """
+        SELECT i.Id,i.CustomerPhone,i.CallLinkedId,i.OccurredAtUtc,
+          p.ProductName,p.ProductSize,p.ProductBrand,p.Quantity,p.QuantityUnit,
+          actions.ActionCodes,i.Outcome,i.LossReason,i.CompetitorName,i.CompetitorPrice,
+          followup.DueAtUtc,followup.Subject,i.Note
+        FROM dbo.SellerInteractions i
+        OUTER APPLY
+        (
+          SELECT TOP(1) ProductName,ProductSize,ProductBrand,Quantity,QuantityUnit
+          FROM dbo.SellerInteractionProducts WHERE InteractionId=i.Id ORDER BY Id
+        ) p
+        OUTER APPLY
+        (
+          SELECT STRING_AGG(ActionCode,N'|') ActionCodes
+          FROM dbo.SellerInteractionActions WHERE InteractionId=i.Id
+        ) actions
+        OUTER APPLY
+        (
+          SELECT TOP(1) DueAtUtc,Subject
+          FROM dbo.SellerFollowUps WHERE InteractionId=i.Id AND Status=N'OPEN'
+          ORDER BY Id DESC
+        ) followup
+        WHERE i.Id=@id AND i.SellerKey=@seller;
+        """;
+        await using var connection = await OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 15 };
+        command.Parameters.Add("@id", SqlDbType.BigInt).Value = id;
+        command.Parameters.Add("@seller", SqlDbType.NVarChar, 80).Value = seller.Key;
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        var actions = (GetString(reader, 9) ?? string.Empty)
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return new SellerInteractionEditResponse(
+            reader.GetInt64(0), reader.GetString(1), GetString(reader, 2), TehranClock.AsUtc(reader.GetDateTime(3)),
+            GetString(reader, 4), GetString(reader, 5), GetString(reader, 6), GetDecimal(reader, 7), GetString(reader, 8),
+            actions, reader.GetString(10), GetString(reader, 11), GetString(reader, 12), GetDecimal(reader, 13),
+            reader.IsDBNull(14) ? null : TehranClock.AsUtc(reader.GetDateTime(14)), GetString(reader, 15), GetString(reader, 16));
+    }
+
+    public async Task<SellerInteractionResult?> UpdateInteractionAsync(
+        SellerIdentity seller, long id, SellerInteractionRequest request, CancellationToken ct)
+    {
+        await EnsureSchemaAsync(ct);
+        var normalized = Validate(request);
+        await using var connection = await OpenAsync(ct);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        try
+        {
+            var identityId = await ResolveIdentityIdAsync(connection, transaction, normalized.Phone, ct);
+            const string updateSql = """
+            UPDATE dbo.SellerInteractions
+            SET CustomerIdentityId=@identity,CustomerPhone=@phone,CallLinkedId=@linked,Outcome=@outcome,
+              LossReason=@loss,CompetitorName=@competitor,CompetitorPrice=@competitorPrice,Note=@note,
+              OccurredAtUtc=@occurred,UpdatedAtUtc=SYSUTCDATETIME()
+            OUTPUT inserted.CreatedAtUtc
+            WHERE Id=@id AND SellerKey=@seller;
+            """;
+            DateTime created;
+            await using (var command = new SqlCommand(updateSql, connection, transaction))
+            {
+                Add(command, "@id", SqlDbType.BigInt, id);
+                Add(command, "@seller", SqlDbType.NVarChar, seller.Key, 80);
+                Add(command, "@identity", SqlDbType.BigInt, identityId);
+                Add(command, "@phone", SqlDbType.NVarChar, normalized.Phone, 32);
+                Add(command, "@linked", SqlDbType.NVarChar, Clean(request.CallLinkedId, 100), 100);
+                Add(command, "@outcome", SqlDbType.NVarChar, normalized.Outcome, 30);
+                Add(command, "@loss", SqlDbType.NVarChar, normalized.LossReason, 30);
+                Add(command, "@competitor", SqlDbType.NVarChar, Clean(request.CompetitorName, 200), 200);
+                AddDecimal(command, "@competitorPrice", request.CompetitorPrice);
+                Add(command, "@note", SqlDbType.NVarChar, Clean(request.Note, 1000), 1000);
+                Add(command, "@occurred", SqlDbType.DateTime2, request.OccurredAtUtc?.ToUniversalTime() ?? DateTime.UtcNow);
+                var value = await command.ExecuteScalarAsync(ct);
+                if (value is null || value is DBNull)
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    return null;
+                }
+                created = (DateTime)value;
+            }
+
+            await using (var clear = new SqlCommand(
+                "DELETE FROM dbo.SellerInteractionProducts WHERE InteractionId=@id; DELETE FROM dbo.SellerInteractionActions WHERE InteractionId=@id; UPDATE dbo.SellerFollowUps SET Status=N'CANCELLED',UpdatedAtUtc=SYSUTCDATETIME() WHERE InteractionId=@id AND Status=N'OPEN';",
+                connection, transaction))
+            {
+                clear.Parameters.Add("@id", SqlDbType.BigInt).Value = id;
+                await clear.ExecuteNonQueryAsync(ct);
+            }
+            if (!string.IsNullOrWhiteSpace(request.ProductName))
+                await InsertProductAsync(connection, transaction, id, request, ct);
+            foreach (var action in normalized.Actions)
+                await InsertActionAsync(connection, transaction, id, action, ct);
+            if (normalized.Outcome == "FOLLOW_UP")
+                await InsertFollowUpAsync(connection, transaction, id, seller, normalized.Phone, request, ct);
+            await InsertAuditAsync(connection, transaction, seller.Key, "UPDATE", "INTERACTION", id.ToString(),
+                normalized.Key, new { normalized.Outcome, normalized.LossReason, normalized.Phone }, ct);
+            await transaction.CommitAsync(ct);
+            return new SellerInteractionResult(id, normalized.Key.ToString(), false, created);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public async Task<bool> CompleteFollowUpAsync(SellerIdentity seller, long id, Guid key, CancellationToken ct)
@@ -621,23 +788,57 @@ public sealed class SellerWorkspaceRepository
 
     private static (Guid Key, string Phone, string Outcome, string? LossReason, string[] Actions) Validate(SellerInteractionRequest r)
     {
-        if (!Guid.TryParse(r.IdempotencyKey, out var key)) throw new ArgumentException("IdempotencyKey is invalid.");
+        if (!Guid.TryParse(r.IdempotencyKey, out var key)) throw new ArgumentException("شناسه یکتای ثبت تعامل معتبر نیست؛ صفحه را تازه‌سازی کنید.");
         var phone = NormalizePhone(r.CustomerPhone);
-        if (phone.Length < 7) throw new ArgumentException("CustomerPhone is invalid.");
+        if (phone.Length < 7 || phone.Length > 15) throw new ArgumentException("شماره مشتری معتبر نیست؛ ابتدا یک تماس یا مشتری واقعی را انتخاب کنید.");
         var outcome = (r.Outcome ?? string.Empty).Trim().ToUpperInvariant();
-        if (!Outcomes.Contains(outcome)) throw new ArgumentException("Outcome is invalid.");
+        if (!Outcomes.Contains(outcome)) throw new ArgumentException("نتیجه مکالمه را انتخاب کنید.");
         var loss = string.IsNullOrWhiteSpace(r.LossReason) ? null : r.LossReason.Trim().ToUpperInvariant();
-        if (outcome == "LOST" && (loss is null || !LossReasons.Contains(loss))) throw new ArgumentException("LossReason is required for LOST.");
-        if (outcome != "LOST" && loss is not null) throw new ArgumentException("LossReason is only valid for LOST.");
+        if (outcome == "LOST" && (loss is null || !LossReasons.Contains(loss))) throw new ArgumentException("دلیل انجام‌نشدن خرید را انتخاب کنید.");
+        if (outcome != "LOST" && loss is not null) throw new ArgumentException("دلیل عدم خرید فقط برای نتیجه «خرید انجام نشد» قابل ثبت است.");
         if (outcome == "FOLLOW_UP" && (!r.FollowUpAtUtc.HasValue || string.IsNullOrWhiteSpace(r.FollowUpSubject)))
-            throw new ArgumentException("FollowUpAtUtc and FollowUpSubject are required for FOLLOW_UP.");
-        if (r.Quantity < 0 || r.CompetitorPrice < 0) throw new ArgumentException("Numeric values cannot be negative.");
+            throw new ArgumentException("زمان و موضوع پیگیری بعدی را وارد کنید.");
+        if (r.Quantity < 0 || r.CompetitorPrice < 0) throw new ArgumentException("مقدار و قیمت نمی‌توانند منفی باشند.");
         var actions = (r.Actions ?? Array.Empty<string>()).Select(x => (x ?? string.Empty).Trim().ToUpperInvariant()).Where(ActionCodes.Contains).Distinct().ToArray();
         return (key, phone, outcome, loss, actions);
     }
 
     private async Task<SqlConnection> OpenAsync(CancellationToken ct) { var c = new SqlConnection(_connectionString); await c.OpenAsync(ct); return c; }
-    private static string NormalizePhone(string? value) { var digits = Regex.Replace(value ?? string.Empty, @"\D", ""); if (digits.StartsWith("0098")) digits = "0" + digits[4..]; else if (digits.StartsWith("98") && digits.Length >= 12) digits = "0" + digits[2..]; return digits; }
+    private static string NormalizePhone(string? value)
+    {
+        var latin = new string((value ?? string.Empty).Select(ch => ch switch
+        {
+            >= '۰' and <= '۹' => (char)('0' + ch - '۰'),
+            >= '٠' and <= '٩' => (char)('0' + ch - '٠'),
+            _ => ch
+        }).ToArray());
+        var digits = Regex.Replace(latin, @"\D", "");
+        if (digits.StartsWith("0098", StringComparison.Ordinal)) digits = "0" + digits[4..];
+        else if (digits.StartsWith("98", StringComparison.Ordinal) && digits.Length >= 12) digits = "0" + digits[2..];
+        else if (digits.Length == 10 && digits[0] != '0') digits = "0" + digits;
+        return digits;
+    }
+    private static string NormalizeSearchText(string? value) => Regex.Replace((value ?? string.Empty)
+        .Replace('ي', 'ی').Replace('ك', 'ک').Trim(), @"\s+", " ");
+    private static DateTime? PersianDateToUtc(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var latin = new string(value.Select(ch => ch switch
+        {
+            >= '۰' and <= '۹' => (char)('0' + ch - '۰'),
+            >= '٠' and <= '٩' => (char)('0' + ch - '٠'),
+            _ => ch
+        }).ToArray());
+        var parts = latin.Split(new[] { '/', '-', '.' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 3 || !int.TryParse(parts[0], out var year) || !int.TryParse(parts[1], out var month) || !int.TryParse(parts[2], out var day))
+            return null;
+        try
+        {
+            var calendar = new PersianCalendar();
+            return TehranClock.ToUtc(calendar.ToDateTime(year, month, day, 12, 0, 0, 0));
+        }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
     private static string? Clean(string? value, int max) { value = value?.Trim(); return string.IsNullOrWhiteSpace(value) ? null : value[..Math.Min(value.Length, max)]; }
     private static string? GetString(SqlDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
     private static decimal? GetDecimal(SqlDataReader r, int i) => r.IsDBNull(i) ? null : r.GetDecimal(i);

@@ -19,8 +19,16 @@ foreach (var migrationPath in migrationPaths)
 }
 
 var databaseName = $"DigiAhan_AiPipeline_Test_{Environment.ProcessId}";
-var masterConnectionString = "Server=lpc:localhost;Database=master;Integrated Security=True;Encrypt=False;Pooling=False;";
-var testConnectionString = $"Server=lpc:localhost;Database={databaseName};Integrated Security=True;Encrypt=False;Pooling=False;";
+var testSqlServer = Environment.GetEnvironmentVariable("DIGIAHAN_TEST_SQL_SERVER") ?? "localhost";
+var masterConnectionString = Environment.GetEnvironmentVariable("DIGIAHAN_TEST_SQL_MASTER_CONNECTION")
+    ?? $"Server={testSqlServer};Database=master;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;Pooling=False;";
+var testBuilder = new SqlConnectionStringBuilder(masterConnectionString)
+{
+    InitialCatalog = databaseName,
+    Pooling = false,
+    TrustServerCertificate = true
+};
+var testConnectionString = testBuilder.ConnectionString;
 
 await using var master = new SqlConnection(masterConnectionString);
 await master.OpenAsync();

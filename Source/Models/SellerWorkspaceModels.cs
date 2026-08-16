@@ -148,6 +148,25 @@ public sealed record SellerInteractionResult(
     bool AlreadyExisted,
     DateTime CreatedAtUtc);
 
+public sealed record SellerInteractionEditResponse(
+    long Id,
+    string CustomerPhone,
+    string? CallLinkedId,
+    DateTime OccurredAtUtc,
+    string? ProductName,
+    string? ProductSize,
+    string? ProductBrand,
+    decimal? Quantity,
+    string? QuantityUnit,
+    IReadOnlyList<string> Actions,
+    string Outcome,
+    string? LossReason,
+    string? CompetitorName,
+    decimal? CompetitorPrice,
+    DateTime? FollowUpAtUtc,
+    string? FollowUpSubject,
+    string? Note);
+
 public sealed record SellerFollowUpCompleteRequest(string IdempotencyKey);
 
 public sealed record SellerWorkspaceAgentOptions

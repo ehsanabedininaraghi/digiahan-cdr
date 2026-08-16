@@ -4,9 +4,11 @@
 **/.vs/
 **/publish/
 artifacts/
+release/
 Logs/
 **/Logs/
 _backups/
+/.tmp-*
 *.user
 *.suo
 *.log

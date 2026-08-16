@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.3.11";
+const string AppVersion = "4.3.12";
 const string BuildDate = "2026-08-11";
 
 var builder = WebApplication.CreateBuilder(args);
@@ -642,6 +642,55 @@ app.MapGet("/api/seller-v2/current-call", async (
         envelope?.PublishedAtUtc ?? TehranClock.AsUtc(persisted?.CreatedAtUtc ?? card.EventTimeUtc), DateTime.UtcNow));
 }).CacheOutput(policy => policy.NoCache());
 
+app.MapGet("/api/seller-v2/live-events", async (
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    AgentEventStore events,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    context.Response.Headers.CacheControl = "no-cache, no-store";
+    context.Response.Headers.Connection = "keep-alive";
+    context.Response.ContentType = "text/event-stream; charset=utf-8";
+    long lastSequence = -1;
+    var lastHeartbeat = DateTime.UtcNow;
+
+    while (!ct.IsCancellationRequested)
+    {
+        var envelope = seller.Extensions
+            .Select(events.Get)
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .OrderByDescending(value => value.Sequence)
+            .FirstOrDefault();
+
+        if (envelope is not null && envelope.Sequence != lastSequence &&
+            envelope.PublishedAtUtc >= DateTime.UtcNow.AddMinutes(-10))
+        {
+            lastSequence = envelope.Sequence;
+            var payload = JsonSerializer.Serialize(new SellerCurrentCallResponse(
+                envelope.Card, envelope.PublishedAtUtc, DateTime.UtcNow));
+            await context.Response.WriteAsync($"event: call\ndata: {payload}\n\n", ct);
+            await context.Response.Body.FlushAsync(ct);
+        }
+        else if (DateTime.UtcNow - lastHeartbeat >= TimeSpan.FromSeconds(15))
+        {
+            lastHeartbeat = DateTime.UtcNow;
+            await context.Response.WriteAsync(": heartbeat\n\n", ct);
+            await context.Response.Body.FlushAsync(ct);
+        }
+
+        try { await Task.Delay(500, ct); }
+        catch (OperationCanceledException) { break; }
+    }
+});
+
 app.MapGet("/api/seller-v2/workspace", async (
     HttpContext context,
     string? phone,
@@ -787,6 +836,40 @@ app.MapPost("/api/seller-v2/interactions", async (
     try
     {
         return Results.Ok(await workspace.SaveInteractionAsync(seller, request, ct));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/seller-v2/interactions/{id:long}", async (
+    long id,
+    HttpContext context,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    var result = await workspace.GetInteractionAsync(seller, id, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+}).CacheOutput(policy => policy.NoCache());
+
+app.MapPut("/api/seller-v2/interactions/{id:long}", async (
+    long id,
+    HttpContext context,
+    SellerInteractionRequest request,
+    SellerWorkspaceAccessService access,
+    SellerWorkspaceRepository workspace,
+    CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    try
+    {
+        var result = await workspace.UpdateInteractionAsync(seller, id, request, ct);
+        return result is null ? Results.NotFound() : Results.Ok(result);
     }
     catch (ArgumentException ex)
     {
@@ -1130,6 +1213,7 @@ app.MapPost("/api/mappings/import", async (
 app.MapGet("/api/ai/status", async (
     HttpContext context,
     IConfiguration configuration,
+    IWebHostEnvironment environment,
     AiAnalysisRepository repository,
     IOptionsMonitor<RecordingIngestionOptions> recordingOptions,
     CancellationToken ct) =>
@@ -1143,6 +1227,7 @@ app.MapGet("/api/ai/status", async (
         recordingIngestion = new
         {
             enabled = ingestion.Enabled,
+            configurationFilePresent = File.Exists(Path.Combine(environment.ContentRootPath, "appsettings.RecordingIngestion.local.json")),
             scope = "TODAY_ONLY",
             ingestion.SourceName,
             ingestion.RemoteRoot,

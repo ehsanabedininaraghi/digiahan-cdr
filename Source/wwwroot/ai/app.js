@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
-const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false, demoMode: false, sampleDetails: {}, hasNext: false };
+const state = { page: 1, pageSize: 50, calls: [], reviews: [], detailId: null, loading: false, demoMode: new URLSearchParams(location.search).get("demo") === "1", sampleDetails: {}, hasNext: false };
 const labels = {
   BUSINESS_CONVERSATION: "مکالمه کاری", QUEUE_ONLY: "فقط صدای صف", NEEDS_REVIEW: "نیازمند بررسی",
   NON_SPEECH_OR_UNSUPPORTED: "غیرگفتاری / پشتیبانی‌نشده", EMPTY_OR_LOW_SIGNAL: "خالی / سیگنال ضعیف",
@@ -86,8 +86,13 @@ async function refreshAll() {
     renderStatus(status, queueStatus === "OPEN" ? state.reviews : (openReviews || []));
     if (state.detailId) await loadDetail(state.detailId, false);
   } catch (error) {
-    try { await loadSampleData(error); }
-    catch { showNotice(error.message, true); }
+    if (new URLSearchParams(location.search).get("demo") === "1") {
+      try { await loadSampleData(error); }
+      catch { showNotice(error.message, true); }
+    } else {
+      state.calls=[];state.reviews=[];state.hasNext=false;renderCalls();renderReviews();
+      showNotice(`داده نمایشی جایگزین نشد. اتصال عملیاتی را اصلاح کنید: ${error.message}`, true);
+    }
   } finally {
     state.loading = false;
     $("loadingCalls").textContent = "";
@@ -149,7 +154,7 @@ function renderStatus(status, openReviews) {
   $("ingestionState").textContent = ingestion.enabled ? "فعال" : "غیرفعال";
   $("ingestionHint").textContent = ingestion.enabled
     ? (ingestion.credentialsConfigured ? "آماده دریافت فایل‌های امروز" : "اطلاعات اتصال کامل نیست")
-    : "برای اجرای عملی باید در تنظیمات فعال شود";
+    : (ingestion.configurationFilePresent ? "تنظیمات موجود است ولی دریافت خاموش است" : "فایل تنظیم اتصال Issabel نصب نشده است");
 }
 function renderCalls() {
   const rows = $("callRows");

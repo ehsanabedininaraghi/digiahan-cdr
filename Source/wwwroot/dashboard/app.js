@@ -97,12 +97,10 @@ function showReportProgress(completed, total, text = 'در حال دریافت �
     $('reportProgressText').textContent = text;
     $('reportProgressPercent').textContent = `${fa(percent)}٪`;
     $('reportProgressBar').style.width = `${percent}%`;
-    $('refresh').disabled = true;
 }
 
 function hideReportProgress() {
     $('reportProgress').classList.add('hidden');
-    $('refresh').disabled = false;
 }
 
 function customerCell(call) {
