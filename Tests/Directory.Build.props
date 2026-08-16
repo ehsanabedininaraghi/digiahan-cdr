@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'DigiAhan.CDR.JourneyMigrationTests'">
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\JourneyMigration\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\JourneyMigration\</BaseOutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'DigiAhan.CDR.SmokeTests'">
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\Smoke\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\Smoke\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

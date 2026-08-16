@@ -3,7 +3,8 @@ param(
     [switch]$ResetDashboardPassword,
     [switch]$EnableJourneyPilot,
     [string[]]$JourneyPilotSellerKeys = @(),
-    [switch]$EnableJourneyAutoCapture
+    [switch]$EnableJourneyAutoCapture,
+    [switch]$ValidatePackageOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +18,6 @@ $parameters = @{
     EnableJourneyPilot = $EnableJourneyPilot
     JourneyPilotSellerKeys = @($JourneyPilotSellerKeys)
     EnableJourneyAutoCapture = $EnableJourneyAutoCapture
+    ValidatePackageOnly = $ValidatePackageOnly
 }
 & $installer @parameters
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

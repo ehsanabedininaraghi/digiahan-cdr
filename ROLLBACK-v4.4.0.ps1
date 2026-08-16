@@ -7,6 +7,50 @@ $ErrorActionPreference = "Stop"
 $repositoryFull = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\')
 $backupContainer = [IO.Path]::GetFullPath((Join-Path $repositoryFull "_backups")).TrimEnd('\')
 $sourceRoot = Join-Path $repositoryFull "Source"
+$serviceName = "DigiAhanCdrDashboard"
+
+function Get-RepositoryReceiverProcessIds {
+    param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
+
+    $expected = [IO.Path]::GetFullPath($ExpectedSourceRoot).TrimEnd('\') + '\'
+    $ids = @()
+    foreach ($process in @(Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue)) {
+        try {
+            $path = [IO.Path]::GetFullPath([string]$process.Path)
+            if ($path.StartsWith($expected,[StringComparison]::OrdinalIgnoreCase)) { $ids += $process.Id }
+        }
+        catch { }
+    }
+    return @($ids)
+}
+
+function Stop-DashboardService {
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -ne $service -and $service.Status -ne [ServiceProcess.ServiceControllerStatus]::Stopped) {
+        Stop-Service -Name $serviceName -Force -ErrorAction Stop
+        $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(30))
+    }
+}
+
+function Install-AndStartDashboardService {
+    $executable = Join-Path $sourceRoot "bin\Release\net8.0\DigiAhan.CDR.Receiver.exe"
+    $serviceCommand = '"' + $executable + '" --contentRoot "' + $sourceRoot + '"'
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -eq $service) {
+        New-Service -Name $serviceName -BinaryPathName $serviceCommand `
+            -DisplayName "DigiAhan CDR Dashboard" -Description "DigiAhan CDR dashboard and integration workers" `
+            -StartupType Automatic | Out-Null
+    }
+    else {
+        & sc.exe config $serviceName "binPath= $serviceCommand" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to update the dashboard Windows service." }
+    }
+    Set-Service -Name $serviceName -StartupType Automatic
+    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
+    & sc.exe failureflag $serviceName 1 | Out-Null
+    Start-Service -Name $serviceName -ErrorAction Stop
+}
+
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
     throw "Repository source was not found: $sourceRoot"
 }
@@ -34,10 +78,11 @@ Start-Transcript -Path (Join-Path $runDir "rollback-transcript.txt") -Force | Ou
 
 try {
     Write-Host "[1/5] Stopping DigiAhan dashboard for rollback..." -ForegroundColor Cyan
+    Stop-DashboardService
     $processIds = @(
         Get-NetTCPConnection -LocalPort 5088 -State Listen -ErrorAction SilentlyContinue |
             Where-Object { $_.OwningProcess -gt 0 } | Select-Object -ExpandProperty OwningProcess
-        Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id
+        Get-RepositoryReceiverProcessIds -ExpectedSourceRoot $sourceRoot
     ) | Sort-Object -Unique
     foreach ($processId in $processIds) { Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue }
 
@@ -100,11 +145,7 @@ try {
     finally { Pop-Location }
 
     Write-Host "[5/5] Starting and health-checking the restored dashboard..." -ForegroundColor Cyan
-    Start-Process dotnet -ArgumentList @("run","--no-build","--configuration","Release") `
-        -WorkingDirectory $sourceRoot `
-        -RedirectStandardOutput (Join-Path $runDir "application-stdout.log") `
-        -RedirectStandardError (Join-Path $runDir "application-stderr.log") `
-        -WindowStyle Hidden | Out-Null
+    Install-AndStartDashboardService
     $healthy = $false
     foreach ($attempt in 1..60) {
         Start-Sleep -Seconds 1

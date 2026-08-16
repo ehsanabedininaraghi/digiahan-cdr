@@ -4,7 +4,8 @@ param(
     [switch]$ResetDashboardPassword,
     [switch]$EnableJourneyPilot,
     [string[]]$JourneyPilotSellerKeys = @(),
-    [switch]$EnableJourneyAutoCapture
+    [switch]$EnableJourneyAutoCapture,
+    [switch]$ValidatePackageOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,8 +19,62 @@ $runDir = Join-Path $RepositoryRoot "Logs\Runs\v$version-$stamp"
 $backupRoot = Join-Path $RepositoryRoot "_backups\v$version-$stamp"
 $dashboardStopped = $false
 $filesInstalled = $false
+$serviceName = "DigiAhanCdrDashboard"
+
+function Get-RepositoryReceiverProcessIds {
+    param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
+
+    $expected = [IO.Path]::GetFullPath($ExpectedSourceRoot).TrimEnd('\') + '\'
+    $ids = @()
+    foreach ($process in @(Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue)) {
+        try {
+            $path = [IO.Path]::GetFullPath([string]$process.Path)
+            if ($path.StartsWith($expected,[StringComparison]::OrdinalIgnoreCase)) { $ids += $process.Id }
+        }
+        catch { }
+    }
+    return @($ids)
+}
+
+function Stop-DashboardService {
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -ne $service -and $service.Status -ne [ServiceProcess.ServiceControllerStatus]::Stopped) {
+        Stop-Service -Name $serviceName -Force -ErrorAction Stop
+        $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(30))
+    }
+}
+
+function Install-AndStartDashboardService {
+    param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
+
+    $executable = Join-Path $ExpectedSourceRoot "bin\Release\net8.0\DigiAhan.CDR.Receiver.exe"
+    if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+        throw "Dashboard executable was not found: $executable"
+    }
+
+    $serviceCommand = '"' + $executable + '" --contentRoot "' + $ExpectedSourceRoot + '"'
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -eq $service) {
+        New-Service -Name $serviceName -BinaryPathName $serviceCommand `
+            -DisplayName "DigiAhan CDR Dashboard" -Description "DigiAhan CDR dashboard and integration workers" `
+            -StartupType Automatic | Out-Null
+    }
+    else {
+        & sc.exe config $serviceName "binPath= $serviceCommand" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to update the dashboard Windows service." }
+    }
+
+    Set-Service -Name $serviceName -StartupType Automatic
+    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to configure service recovery." }
+    & sc.exe failureflag $serviceName 1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to enable service recovery for non-crash failures." }
+
+    Start-Service -Name $serviceName -ErrorAction Stop
+}
 
 $relativeFiles = @(
+    "global.json",
     "Source\Program.cs",
     "Source\DigiAhan.CDR.Receiver.csproj",
     "Source\appsettings.example.json",
@@ -124,8 +179,68 @@ if ([version]$version -ge [version]"4.4.0") {
     )
 }
 
-if (-not (Test-Path -LiteralPath $sourceRoot)) { throw "Repository source not found: $sourceRoot" }
 if (-not (Test-Path -LiteralPath $payloadRoot)) { throw "Release payload not found: $payloadRoot" }
+
+if ($ValidatePackageOnly) {
+    $missing = @($relativeFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $payloadRoot $_) -PathType Leaf) })
+    if ($missing.Count -gt 0) { throw "Release payload is incomplete: $($missing -join ', ')" }
+
+    $scripts = @(
+        Get-ChildItem -LiteralPath $PSScriptRoot -File -Filter "*.ps1" -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $payloadRoot -File -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
+    )
+    foreach ($script in $scripts) {
+        $tokens = $null
+        $errors = $null
+        [Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+        if ($errors.Count -gt 0) { throw "PowerShell syntax error in $($script.FullName): $($errors[0].Message)" }
+    }
+    $program = Get-Content -LiteralPath (Join-Path $payloadRoot "Source\Program.cs") -Raw -Encoding UTF8
+    if ($program -notmatch ('AppVersion\s*=\s*"' + [regex]::Escape($version) + '"')) {
+        throw "Payload Program.cs does not identify v$version."
+    }
+    Write-Host "PASS: v$version package payload is complete and all PowerShell scripts parse." -ForegroundColor Green
+    return
+}
+
+if (-not (Test-Path -LiteralPath $sourceRoot)) { throw "Repository source not found: $sourceRoot" }
+
+# A Windows service restarts processes behind the installer's back. Validate it before
+# disabling tasks, stopping the dashboard, writing backups, or copying any payload file.
+$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if ($null -ne $existingService) {
+    $serviceConfig = (& sc.exe qc $serviceName 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Could not inspect Windows service $serviceName; no files were changed." }
+    if ($serviceConfig.IndexOf($sourceRoot,[StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Windows service $serviceName points outside $sourceRoot. Correct its path before installing; no files were changed."
+    }
+    if ($existingService.Status -ne [ServiceProcess.ServiceControllerStatus]::Running) {
+        throw "Windows service $serviceName must be running and healthy before installation; no files were changed."
+    }
+    try {
+        $preflightVersion = (Invoke-RestMethod "http://localhost:5088/api/version" -TimeoutSec 5).version
+        $preflightHealth = (Invoke-RestMethod "http://localhost:5088/health" -TimeoutSec 5).status
+    }
+    catch {
+        throw "Windows service preflight failed. Fix its SQL identity/health before installing; no files were changed. $($_.Exception.Message)"
+    }
+    if ($preflightHealth -ne "healthy") {
+        throw "Windows service is not healthy before installation (version $preflightVersion); no files were changed."
+    }
+}
+else {
+    $runtimeConfigPath = Join-Path $sourceRoot "appsettings.json"
+    if (Test-Path -LiteralPath $runtimeConfigPath -PathType Leaf) {
+        $runtimeConfig = Get-Content -LiteralPath $runtimeConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $runtimeConnection = [string]$runtimeConfig.ConnectionStrings.DigiAhanCdr
+        if (-not [string]::IsNullOrWhiteSpace($runtimeConnection)) {
+            $connectionBuilder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($runtimeConnection)
+            if ($connectionBuilder.IntegratedSecurity) {
+                throw "No $serviceName service exists and DigiAhanCdr uses Windows authentication. Configure a SQL-authorized service identity before installation; no files were changed."
+            }
+        }
+    }
+}
 
 New-Item -ItemType Directory -Force -Path $runDir,$backupRoot | Out-Null
 Start-Transcript -Path (Join-Path $runDir "installer-transcript.txt") -Force | Out-Null
@@ -151,18 +266,18 @@ try {
 
     $phase = "STOP"
     Write-Host "[2/8] Stopping the current dashboard process and orphan workers..." -ForegroundColor Cyan
+    Stop-DashboardService
     $processIds = @(
         Get-NetTCPConnection -LocalPort 5088 -State Listen -ErrorAction SilentlyContinue |
             Where-Object { $_.OwningProcess -gt 0 } |
             Select-Object -ExpandProperty OwningProcess
-        Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty Id
+        Get-RepositoryReceiverProcessIds -ExpectedSourceRoot $sourceRoot
     ) | Sort-Object -Unique
     foreach ($processId in $processIds) {
         Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds 2
-    $remainingAppProcesses = @(Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue)
+    $remainingAppProcesses = @(Get-RepositoryReceiverProcessIds -ExpectedSourceRoot $sourceRoot)
     if ($remainingAppProcesses.Count -gt 0) {
         throw "The existing DigiAhan.CDR.Receiver process could not be stopped."
     }
@@ -304,12 +419,8 @@ try {
     finally { Pop-Location }
 
     $phase = "START"
-    Write-Host "[6/8] Starting the dashboard..." -ForegroundColor Cyan
-    $stdout = Join-Path $runDir "application-stdout.log"
-    $stderr = Join-Path $runDir "application-stderr.log"
-    Start-Process dotnet -ArgumentList @("run","--no-build","--configuration","Release") `
-        -WorkingDirectory $sourceRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-        -WindowStyle Hidden | Out-Null
+    Write-Host "[6/8] Installing and starting the persistent dashboard service..." -ForegroundColor Cyan
+    Install-AndStartDashboardService -ExpectedSourceRoot $sourceRoot
 
     $healthy = $false
     foreach ($attempt in 1..60) {
@@ -407,12 +518,12 @@ catch {
     if ($dashboardStopped) {
         Write-Host "Attempting automatic rollback to the pre-installation files..." -ForegroundColor Yellow
         try {
+            Stop-DashboardService
             $rollbackProcessIds = @(
                 Get-NetTCPConnection -LocalPort 5088 -State Listen -ErrorAction SilentlyContinue |
                     Where-Object { $_.OwningProcess -gt 0 } |
                     Select-Object -ExpandProperty OwningProcess
-                Get-Process -Name "DigiAhan.CDR.Receiver" -ErrorAction SilentlyContinue |
-                    Select-Object -ExpandProperty Id
+                Get-RepositoryReceiverProcessIds -ExpectedSourceRoot $sourceRoot
             ) | Sort-Object -Unique
             foreach ($rollbackProcessId in $rollbackProcessIds) {
                 Stop-Process -Id $rollbackProcessId -Force -ErrorAction SilentlyContinue
@@ -455,11 +566,7 @@ catch {
             }
             finally { Pop-Location }
 
-            $rollbackStdout = Join-Path $runDir "rollback-application-stdout.log"
-            $rollbackStderr = Join-Path $runDir "rollback-application-stderr.log"
-            Start-Process dotnet -ArgumentList @("run","--no-build","--configuration","Release") `
-                -WorkingDirectory $sourceRoot -RedirectStandardOutput $rollbackStdout -RedirectStandardError $rollbackStderr `
-                -WindowStyle Hidden | Out-Null
+            Install-AndStartDashboardService -ExpectedSourceRoot $sourceRoot
             $rollbackHealthy = $false
             foreach ($rollbackAttempt in 1..60) {
                 Start-Sleep -Seconds 1
