@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>هوش مکالمات دیجی‌آهن</title>
-  <link rel="stylesheet" href="style.css?v=4312">
+  <link rel="stylesheet" href="style.css?v=voice2">
+  <link rel="stylesheet" href="coaching.css?v=voice2">
 </head>
 <body>
 <header class="topbar">
   <div>
     <p class="eyebrow">DigiAhan Conversation Intelligence</p>
     <h1>هوش مکالمات <span data-app-version>v4.3.12</span></h1>
-    <p>متن تماس، داده‌های استخراج‌شده و موارد نیازمند بررسی انسانی</p>
+    <p>خروجی عملی تماس‌ها برای راهنمایی فروش، کشف خطا و بازبینی موارد حساس</p>
   </div>
   <a class="back" href="/dashboard">بازگشت به داشبورد</a>
 </header>
@@ -22,7 +23,7 @@
   <section class="panel access-panel">
     <div>
       <h2>دسترسی و فیلترها</h2>
-      <p>این صفحه فقط داده عملیاتی دیتابیس را نمایش می‌دهد. حالت نمونه صرفاً با افزودن <b dir="ltr">?demo=1</b> فعال می‌شود.</p>
+      <p>ابتدا داده عملیاتی خوانده می‌شود؛ تا زمان اتصال مستقیم Issabel، ویس‌های پوشه محلی به‌صورت دوره‌ای تحلیل می‌شوند.</p>
     </div>
     <label>توکن API<input id="apiToken" type="password" autocomplete="off" placeholder="اختیاری در همین سیستم"></label>
     <label>نام بازبین<input id="reviewer" type="text" maxlength="100" placeholder="مثلاً مدیر فروش"></label>
@@ -35,6 +36,24 @@
     <article class="warning"><span>بازبینی باز</span><strong id="openReviewCount">۰</strong><small>نیازمند تصمیم انسان</small></article>
     <article><span>ورود صدای روزانه</span><strong id="ingestionState">نامشخص</strong><small id="ingestionHint">در حال بررسی</small></article>
     <article><span>حالت داده</span><strong id="sampleDataCount">عملیاتی</strong><small id="sampleDataHint">نمونه نمایشی خودکار نیست</small></article>
+  </section>
+
+  <section id="coachingOverview" class="panel coaching-overview hidden">
+    <div class="panel-head">
+      <div><h2>خلاصه مربی‌گری فروش</h2><p>برگرفته از ویس‌های واقعی موجود؛ موارد حساس فقط کاندیدای بازبینی انسانی‌اند.</p></div>
+    </div>
+    <div class="coach-metrics">
+      <article><span>آماده راهنمایی</span><strong id="coachReadyCount">۰</strong></article>
+      <article><span>نیازمند متن بهتر</span><strong id="transcriptReviewCount">۰</strong></article>
+      <article><span>دلیل احتمالی عدم خرید</span><strong id="nonPurchaseFindingCount">۰</strong></article>
+      <article class="sensitive"><span>نشانه حساس برای بازبینی</span><strong id="sensitiveFindingCount">۰</strong></article>
+    </div>
+    <div class="coach-overview-grid">
+      <article><h3>موضوعات پرتکرار</h3><ul id="topTopics" class="rank-list"></ul></article>
+      <article><h3>دلایل احتمالی عدم خرید</h3><ul id="topNonPurchaseReasons" class="rank-list"></ul></article>
+      <article class="priority"><h3>اولویت‌های آموزشی پیشنهادی</h3><div id="priorityActions"></div></article>
+    </div>
+    <p id="coachingNotice" class="coach-notice"></p>
   </section>
 
   <section class="panel filter-panel">
@@ -71,7 +90,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>زمان</th><th>شناسه تماس</th><th>نوع</th><th>داخلی</th><th>اطمینان</th><th>داده</th><th>بررسی باز</th><th></th></tr></thead>
+          <thead><tr><th>زمان</th><th>شناسه تماس</th><th>نوع</th><th>داخلی</th><th>اطمینان</th><th>پوشش مکالمه</th><th>بررسی باز</th><th></th></tr></thead>
           <tbody id="callRows"></tbody>
         </table>
       </div>
@@ -83,6 +102,7 @@
       <div id="detailContent" class="hidden">
         <div class="panel-head"><div><h2 id="detailTitle">جزئیات تماس</h2><p id="detailMeta"></p></div><button id="closeDetail" class="icon-button" title="بستن">×</button></div>
         <section class="summary-box"><span>جمع‌بندی ماشینی</span><p id="detailSummary"></p><small>خروجی ماشینی است و حکم قطعی درباره افراد نیست.</small></section>
+        <section><h3>راهنمای فروش برای این تماس</h3><div id="coachingDetail" class="coaching-detail"></div></section>
         <section><h3>وضعیت پردازش ضبط</h3><div id="recordingStatus" class="status-line"></div></section>
         <section><h3>متن و زمان‌بندی</h3><div id="transcript" class="transcript"></div></section>
         <section><h3>داده‌های استخراج‌شده</h3><div id="facts" class="facts"></div></section>
@@ -106,6 +126,6 @@
 
 <footer>دیجی‌آهن · داده خام و فایل فیزیکی در مرورگر افشا نمی‌شود · پخش صدا در این مرحله فعال نیست</footer>
 <script src="/version.js?v=4312" defer></script>
-<script src="app.js?v=4312" defer></script>
+<script src="app.js?v=voice3" defer></script>
 </body>
 </html>
