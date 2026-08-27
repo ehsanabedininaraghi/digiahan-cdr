@@ -398,8 +398,35 @@ function toast(text) {
     setTimeout(() => $('toast').style.display = 'none', 3500);
 }
 
+async function runAllHealth() {
+    const button = $('runAllHealth');
+    if (button.disabled) return;
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'در حال اجرای اتصال‌ها…';
+    try {
+        const response = await fetch('/api/system/schedules/run-all', {
+            method: 'POST', cache: 'no-store', credentials: 'same-origin'
+        });
+        let payload = null;
+        try { payload = await response.json(); } catch { }
+        if (!response.ok) throw new Error(payload?.error || 'اجرای اتصال‌ها ناموفق بود.');
+        const failed = (Array.isArray(payload) ? payload : []).filter(x => x.status === 'FAILED');
+        toast(failed.length
+            ? `${fa(failed.length)} اتصال با خطا تمام شد؛ جزئیات در System Health ثبت شد.`
+            : 'همهٔ اتصال‌های فعال اجرا و بروزرسانی شدند.');
+        await load();
+    } catch (error) {
+        toast(error.message || 'اجرای اتصال‌ها ناموفق بود.');
+    } finally {
+        button.disabled = false;
+        button.textContent = original;
+    }
+}
+
 document.querySelectorAll('.period').forEach(btn => btn.onclick = () => setPeriod(btn.dataset.period));
 $('refresh').onclick = load;
+$('runAllHealth').onclick = runAllHealth;
 $('extension').onchange = load;
 $('status').onchange = load;
 $('startDate').onchange = () => document.querySelectorAll('.period').forEach(x => x.classList.remove('active'));

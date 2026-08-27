@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f7fb">
   <title>میز کار فروش دیجی‌آهن</title>
   <link rel="stylesheet" href="./style.css?v=442">
-  <link rel="stylesheet" href="./enhancements.css?v=444">
+  <link rel="stylesheet" href="./enhancements.css?v=4442">
   <link rel="stylesheet" href="./balance.css?v=441">
 </head>
 <body>
@@ -31,6 +31,7 @@
         <button class="nav-item active" data-view="workspace"><span class="nav-icon">⌂</span><span>میز کار من</span></button>
         <button class="nav-item" data-view="tasks"><span class="nav-icon">✓</span><span>پیگیری‌ها</span><em id="navTaskCount">۰</em></button>
         <button class="nav-item" data-view="customers"><span class="nav-icon">♙</span><span>مشتریان</span></button>
+        <button class="nav-item" data-view="calls"><span class="nav-icon">☎</span><span>تماس‌ها</span></button>
         <button class="nav-item" data-view="reports"><span class="nav-icon">⌁</span><span>عملکرد من</span></button>
         <button id="mappingNav" class="nav-item hidden" type="button"><span class="nav-icon">↔</span><span>اتصال فاکتور و موبایل</span><em id="mappingBadge" class="hidden">۰</em></button>
       </nav>
@@ -83,6 +84,12 @@
               <div><span>نتیجه ناقص</span><b id="yesterdayMissing">۰</b></div>
             </div>
           </details>
+        </section>
+
+        <section id="sellerCallsPanel" class="seller-calls-panel panel hidden" aria-label="تماس‌های من">
+          <div class="section-title seller-calls-title"><div><h2>تماس‌ها</h2><p>تماس‌های یکتا و قابل پیگیری شما؛ برای دیدن پروندهٔ مشتری روی هر ردیف بزنید.</p></div><button id="sellerCallsRefresh" class="secondary-button" type="button">بروزرسانی</button></div>
+          <div class="seller-calls-filters"><label><span>از تاریخ</span><input id="sellerCallsStartDate" type="date"></label><label><span>تا تاریخ</span><input id="sellerCallsEndDate" type="date"></label><input id="sellerCallSearch" type="search" placeholder="شماره، نام، شرکت یا شناسه تماس"><select id="sellerCallStatus"><option value="all">همه وضعیت‌ها</option><option value="answered">پاسخ داده‌شده</option><option value="missed">از دست‌رفته</option><option value="new">فقط مشتری جدید</option><option value="known">فقط مشتریان شناسایی‌شده</option></select></div>
+          <p id="sellerCallCount" class="seller-calls-count">در حال دریافت تماس‌ها…</p><div class="seller-calls-table-wrap"><table class="seller-calls-table"><thead><tr><th>زمان</th><th>شماره مشتری</th><th>نام مشتری</th><th>شرکت</th><th>جهت</th><th>وضعیت</th><th>مدت مکالمه</th></tr></thead><tbody id="sellerCallRows"></tbody></table></div>
         </section>
 
         <section class="content-grid">
@@ -240,6 +247,6 @@
   </aside>
 
   <script src="/version.js?v=444" defer></script>
-  <script src="./app.js?v=4441"></script>
+  <script src="./app.js?v=4442"></script>
 </body>
 </html>

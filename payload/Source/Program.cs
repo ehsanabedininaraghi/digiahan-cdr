@@ -168,11 +168,7 @@ app.Use(async (context, next) =>
         return;
     }
 
-    var supplied = context.Request.Cookies["digiahan_dashboard_auth"];
-    var expected = DashboardCookieValue(context.RequestServices.GetRequiredService<IConfiguration>());
-    if (!string.IsNullOrWhiteSpace(expected)
-        && !string.IsNullOrWhiteSpace(supplied)
-        && TokenComparer.FixedTimeEquals(expected, supplied))
+    if (HasDashboardAccess(context, context.RequestServices.GetRequiredService<IConfiguration>()))
     {
         await next();
         return;
@@ -824,6 +820,17 @@ app.MapGet("/api/seller-v2/customers/search", async (
     return Results.Ok(await workspace.SearchCustomersAsync(q, take ?? 20, ct));
 }).CacheOutput(policy => policy.NoCache());
 
+app.MapGet("/api/seller-v2/calls", async (
+    HttpContext context, DateTime? startDate, DateTime? endDate, string? search, string? status,
+    int? page, int? pageSize, SellerWorkspaceAccessService access, DashboardRepository dashboard, CancellationToken ct) =>
+{
+    var seller = await access.AuthenticateAsync(context, ct);
+    if (seller is null) return Results.Unauthorized();
+    var (start, end) = ResolveRange(startDate, endDate);
+    return Results.Ok(await dashboard.Calls(start, end, string.Join(',', seller.Extensions), search, status,
+        page ?? 1, pageSize ?? 100, ct));
+}).CacheOutput(policy => policy.NoCache());
+
 app.MapGet("/api/seller-v2/customers/profile", async (
     HttpContext context,
     string? phone,
@@ -1046,6 +1053,13 @@ app.MapGet("/api/system/health", async (
 app.MapGet("/api/system/schedules", async (
     IntegrationSchedulerRepository repository,
     CancellationToken ct) => Results.Ok(await repository.GetAllAsync(ct)));
+
+app.MapPost("/api/system/schedules/run-all", async (
+    HttpContext context, IConfiguration configuration, IntegrationSchedulerService scheduler, CancellationToken ct) =>
+{
+    if (!CanWriteInternalData(context, configuration) && !HasDashboardAccess(context, configuration)) return Results.Unauthorized();
+    return Results.Ok(await scheduler.RunAllEnabledAsync(ct));
+});
 
 app.MapPut("/api/system/schedules/{jobKey}", async (
     string jobKey,
@@ -1523,6 +1537,14 @@ static bool CanWriteInternalData(HttpContext context, IConfiguration configurati
     var supplied = context.Request.Headers["X-Api-Token"].FirstOrDefault();
     return !string.IsNullOrWhiteSpace(expected)
         && !string.IsNullOrWhiteSpace(supplied)
+        && TokenComparer.FixedTimeEquals(expected, supplied);
+}
+
+static bool HasDashboardAccess(HttpContext context, IConfiguration configuration)
+{
+    var supplied = context.Request.Cookies["digiahan_dashboard_auth"];
+    var expected = DashboardCookieValue(configuration);
+    return !string.IsNullOrWhiteSpace(expected) && !string.IsNullOrWhiteSpace(supplied)
         && TokenComparer.FixedTimeEquals(expected, supplied);
 }
 

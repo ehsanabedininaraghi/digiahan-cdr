@@ -15,6 +15,13 @@ public sealed record IntegrationScheduleRow(
 
 public sealed record IntegrationScheduleUpdate(int IntervalMinutes, bool IsEnabled);
 
+public sealed record IntegrationRunNowResult(
+    string JobKey,
+    string DisplayName,
+    bool Started,
+    string Status,
+    string? Error);
+
 public sealed record SystemHealthSnapshot(
     string SqlStatus,
     string DidarStatus,

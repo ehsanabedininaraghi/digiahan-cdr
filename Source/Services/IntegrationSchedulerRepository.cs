@@ -75,13 +75,15 @@ public sealed class IntegrationSchedulerRepository
         await EnsureSchemaAsync(ct);
         var runId = Guid.NewGuid();
         const string sql = """
+            DECLARE @changed int = 0;
             UPDATE dbo.IntegrationSchedules WITH(UPDLOCK,ROWLOCK)
             SET LastStartedAtUtc=SYSUTCDATETIME(),LastStatus=N'RUNNING',LastError=NULL,UpdatedAtUtc=SYSUTCDATETIME()
             WHERE JobKey=@job AND IsEnabled=1 AND NextRunAtUtc<=SYSUTCDATETIME() AND ISNULL(LastStatus,N'')<>N'RUNNING';
-            IF @@ROWCOUNT=1
+            SET @changed=@@ROWCOUNT;
+            IF @changed=1
                 INSERT dbo.IntegrationJobRuns(RunId,JobKey,StartedAtUtc,Status)
                 VALUES(@run,@job,SYSUTCDATETIME(),N'RUNNING');
-            SELECT @@ROWCOUNT;
+            SELECT @changed;
             """;
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);

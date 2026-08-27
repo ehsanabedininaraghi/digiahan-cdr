@@ -8,7 +8,12 @@
 ),
 Eligible AS
 (
-    SELECT * FROM Raw WHERE @ext=N'all' OR Src=@ext OR Dst=@ext
+    SELECT * FROM Raw
+    WHERE @ext=N'all' OR EXISTS
+    (
+        SELECT 1 FROM STRING_SPLIT(@ext,N',') x
+        WHERE LTRIM(RTRIM(x.value))=Src OR LTRIM(RTRIM(x.value))=Dst
+    )
 ),
 Grouped AS
 (

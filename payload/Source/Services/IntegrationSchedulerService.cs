@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DigiAhan.CDR.Receiver.Models;
 
 namespace DigiAhan.CDR.Receiver.Services;
 
@@ -46,6 +47,21 @@ public sealed class IntegrationSchedulerService
     {
         foreach (var jobKey in await _repository.GetDueJobKeysAsync(ct))
             await RunAsync(jobKey, false, ct);
+    }
+
+    public async Task<IReadOnlyList<IntegrationRunNowResult>> RunAllEnabledAsync(CancellationToken ct)
+    {
+        var jobs = await _repository.GetAllAsync(ct);
+        var results = new List<IntegrationRunNowResult>();
+
+        foreach (var job in jobs.Where(x => x.IsEnabled))
+        {
+            var started = await RunAsync(job.JobKey, true, ct);
+            var current = (await _repository.GetAllAsync(ct)).First(x => x.JobKey == job.JobKey);
+            results.Add(new IntegrationRunNowResult(job.JobKey, job.DisplayName, started,
+                current.LastStatus ?? (started ? "SUCCESS" : "SKIPPED"), current.LastError));
+        }
+        return results;
     }
 
     public async Task<bool> RunAsync(string jobKey, bool force, CancellationToken ct)

@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  const fallback="4.4.4";
+  const fallback="4.4.5";
   const ensureChip=version=>{
     let targets=[...document.querySelectorAll("[data-app-version],#versionBadge,#footerVersion")];
     if(!targets.length){
