@@ -48,8 +48,11 @@ public sealed class SystemHealthService
 
         var issabelStatus = lastCdr is null ? "NO_DATA" :
             DateTime.UtcNow - lastCdr.Value <= TimeSpan.FromMinutes(15) ? "OK" : "STALE";
+        var didarJob = jobs.FirstOrDefault(x => x.JobKey == "DIDAR_IDENTITY");
+        var didarFreshnessMinutes = Math.Clamp((didarJob?.IntervalMinutes ?? 60) + 15, 30, 180);
         var didarStatus = didarContacts == 0 || didarPhones == 0 ? "NO_DATA" :
-            lastDidar.HasValue && DateTime.UtcNow - lastDidar.Value <= TimeSpan.FromMinutes(30) ? "OK" : "STALE";
+            string.Equals(didarJob?.LastStatus, "FAILED", StringComparison.OrdinalIgnoreCase) ? "FAILED" :
+            lastDidar.HasValue && DateTime.UtcNow - lastDidar.Value <= TimeSpan.FromMinutes(didarFreshnessMinutes) ? "OK" : "STALE";
         var accountingJob = jobs.FirstOrDefault(x => x.JobKey == "ACCOUNTING");
         var accountingStatus = accountingJob?.LastStatus ?? (lastAccounting is null ? "NO_DATA" : "OK");
         var pending = jobs.Count(x => x.IsEnabled && x.NextRunAtUtc <= DateTime.UtcNow);

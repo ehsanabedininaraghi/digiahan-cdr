@@ -34,10 +34,49 @@ public sealed record SystemHealthSnapshot(
     DateTime GeneratedAtUtc);
 
 public sealed record SellerPerformanceRow(
-    string Extension,
+    string SellerKey,
+    string DisplayName,
+    string Extensions,
+    int HandledCalls,
+    int InboundAnswered,
+    int OutboundCalls,
+    int AnsweredCalls,
+    int Interactions,
+    int MissingInteractions,
+    int QualityPercent,
+    int TalkSeconds,
+    int AverageTalkSeconds,
     int FollowUps,
     int Quotes,
     int Orders,
-    int NoNeed,
-    int Notes,
-    int TotalOutcomes);
+    int Lost);
+
+public sealed record SellerDailyActivityRow(
+    DateTime DayUtc,
+    string SellerKey,
+    string DisplayName,
+    string Extensions,
+    int UniqueCalls,
+    int AnsweredCalls,
+    int MissedCalls,
+    int UnregisteredResults,
+    int Interactions,
+    int Quotes,
+    int FollowUps,
+    int Orders,
+    int Lost);
+
+public sealed record SellerActivityRow(
+    DateTime EventAtUtc,
+    string EventType,
+    string SellerKey,
+    string SellerDisplayName,
+    string? CustomerPhone,
+    string? CustomerName,
+    string Status,
+    string? Outcome,
+    string? Details,
+    string? LinkedId,
+    bool RequiresFollowUp);
+
+public sealed record SellerActivityPage(int Total, IReadOnlyList<SellerActivityRow> Items);

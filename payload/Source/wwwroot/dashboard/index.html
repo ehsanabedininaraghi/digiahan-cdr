@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>داشبورد تماس دیجی‌آهن</title>
-<link rel="stylesheet" href="style.css?v=4311">
+<link rel="stylesheet" href="style.css?v=441">
 </head>
 <body>
 <div id="reportProgress" class="report-progress hidden" role="status" aria-live="polite">
@@ -17,13 +17,13 @@
 <div class="shell">
 <aside>
   <div class="brand"><img class="brand-logo" src="assets/digiahan-logo.png" alt="لوگوی دیجی‌آهن"><div class="brand-title"><b>دیجی‌آهن</b><small>مدیریت تماس‌ها</small></div></div>
-  <nav><a class="active">داشبورد</a><a href="#calls">تماس‌ها</a><a href="#extensions">فروشنده‌ها</a><a href="/seller-admin">کاربران فروش</a><a href="#sales">فروش</a><a href="/ai">هوش مکالمات</a><a href="/invoice-notifications">ارسال اطلاعات خرید</a><a href="#system-health">سلامت سیستم</a><a href="#trend">روند روزانه</a></nav>
+  <nav><a class="active">داشبورد</a><a href="/seller-activity/#daily">تعاملات فروش</a><a href="/seller-activity/#calls">تماس‌های پیگیری‌پذیر</a><a href="#extensions">فروشنده‌ها</a><a href="/seller-admin">کاربران فروش</a><a href="#sales">فروش</a><a href="/ai">هوش مکالمات</a><a href="/invoice-notifications">ارسال اطلاعات خرید</a><a href="#system-health">سلامت سیستم</a><a href="#trend">روند روزانه</a></nav>
   <div class="sync"><span id="syncDot"></span><div><b id="syncText">در حال بررسی</b><small id="syncTime">...</small></div></div>
   <div class="sync accounting-sync"><span id="accountingSyncDot"></span><div><b id="accountingSyncText">در حال بررسی حسابداری</b><small id="accountingSyncTime">...</small></div></div>
 </aside>
 <main>
 <header>
-  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v4.3.11</span></h1><p>گزارش تماس‌ها، مشتریان، فروش و سلامت اتصال‌ها</p></div>
+  <div><h1>داشبورد مرکز تماس <span class="version-badge" id="versionBadge">v4.4.1</span></h1><p>گزارش تماس‌ها، مشتریان، فروش و سلامت اتصال‌ها</p></div>
   <a href="/api/dashboard-auth/logout">خروج</a>
 </header>
 
@@ -70,6 +70,11 @@
 <article><span>خروجی</span><strong id="outbound">۰</strong><small>تماس کارشناسان</small></article>
 </section>
 
+<section class="panel management-insights">
+  <div class="panel-head"><div><h2>برداشت مدیریتی</h2><p>نتیجه‌های قابل اقدام از بازهٔ انتخاب‌شده</p></div></div>
+  <div id="managementInsights" class="insight-grid"><article>در حال تحلیل عملکرد…</article></div>
+</section>
+
 <section class="grid">
 <article class="panel wide"><div class="panel-head"><div><h2>الگوی ساعتی تماس‌ها</h2><p>در بازه انتخاب‌شده</p></div></div><div id="chart" class="chart"></div></article>
 <article class="panel"><div class="panel-head"><div><h2>نرخ پاسخ</h2><p>ترکیب نتیجه تماس‌ها</p></div></div><div id="donut" class="donut"><div><b id="donutValue">۰٪</b><span>پاسخ</span></div></div><div class="legend"><span><i class="ok"></i>پاسخ داده‌شده</span><span><i class="bad"></i>از دست‌رفته</span></div></article>
@@ -77,12 +82,12 @@
 
 <section id="extensions" class="panel">
 <div class="panel-head"><div><h2>عملکرد داخلی‌ها / فروشنده‌ها</h2><p>رتبه‌بندی در بازه انتخاب‌شده</p></div></div>
-<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>کل</th><th>ورودی</th><th>خروجی</th><th>پاسخ</th><th>از دست‌رفته</th><th>مکالمه</th><th>میانگین</th></tr></thead><tbody id="extRows"></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>مکالمه منتسب</th><th>ورودی پاسخ‌داده</th><th>خروجی</th><th>پاسخ</th><th>خروجی بی‌پاسخ</th><th>زمان مکالمه</th><th>میانگین</th></tr></thead><tbody id="extRows"></tbody></table></div>
 </section>
 
 <section id="seller-performance" class="panel">
-<div class="panel-head"><div><h2>گزارش عملکرد فروشنده‌ها</h2><p>نتیجه‌های ثبت‌شده در همان بازه انتخاب‌شده</p></div></div>
-<div class="table-wrap"><table><thead><tr><th>داخلی</th><th>نام</th><th>پیگیری</th><th>قیمت داده شد</th><th>سفارش</th><th>عدم نیاز</th><th>یادداشت</th><th>کل نتیجه‌ها</th></tr></thead><tbody id="sellerPerformanceRows"></tbody></table></div>
+<div class="panel-head"><div><h2>گزارش عملکرد فروشنده‌ها</h2><p>فقط تماس‌های واقعاً پاسخ‌داده‌شده یا خروجیِ همان فروشنده</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>فروشنده</th><th>داخلی‌ها</th><th>مکالمه منتسب</th><th>ورودی پاسخ‌داده</th><th>خروجی</th><th>کل پاسخ</th><th>تعامل ثبت‌شده</th><th>تعامل ناقص</th><th>کیفیت ثبت</th><th>مکالمه</th><th>میانگین</th><th>قیمت</th><th>پیگیری</th><th>سفارش</th><th>عدم خرید</th></tr></thead><tbody id="sellerPerformanceRows"></tbody></table></div>
 </section>
 
 <section id="sales" class="panel sales-panel">
@@ -138,10 +143,11 @@
 <div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>کل</th><th>پاسخ</th><th>بی‌پاسخ</th><th>ورودی</th><th>خروجی</th><th>مشتری جدید</th><th>شناخته‌شده</th><th>مکالمه</th></tr></thead><tbody id="dailyRows"></tbody></table></div>
 </section>
 
-<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v4.3.11</span></footer>
+<footer>سامانه گزارش تماس دیجی‌آهن • Issabel + Didar + Accounting + SQL Server • <span id="footerVersion">v4.4.1</span></footer>
 </main>
 </div>
 <div id="toast"></div>
-<script src="app.js?v=4311"></script>
+<script src="/version.js?v=444" defer></script>
+<script src="app.js?v=4441"></script>
 </body>
 </html>

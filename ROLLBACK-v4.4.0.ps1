@@ -8,6 +8,7 @@ $repositoryFull = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\')
 $backupContainer = [IO.Path]::GetFullPath((Join-Path $repositoryFull "_backups")).TrimEnd('\')
 $sourceRoot = Join-Path $repositoryFull "Source"
 $serviceName = "DigiAhanCdrDashboard"
+$taskName = "DigiAhan CDR Dashboard"
 
 function Get-RepositoryReceiverProcessIds {
     param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
@@ -25,6 +26,10 @@ function Get-RepositoryReceiverProcessIds {
 }
 
 function Stop-DashboardService {
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($null -ne $task -and $task.State -ne "Ready") {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    }
     $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
     if ($null -ne $service -and $service.Status -ne [ServiceProcess.ServiceControllerStatus]::Stopped) {
         Stop-Service -Name $serviceName -Force -ErrorAction Stop
@@ -34,21 +39,17 @@ function Stop-DashboardService {
 
 function Install-AndStartDashboardService {
     $executable = Join-Path $sourceRoot "bin\Release\net8.0\DigiAhan.CDR.Receiver.exe"
-    $serviceCommand = '"' + $executable + '" --contentRoot "' + $sourceRoot + '"'
-    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-    if ($null -eq $service) {
-        New-Service -Name $serviceName -BinaryPathName $serviceCommand `
-            -DisplayName "DigiAhan CDR Dashboard" -Description "DigiAhan CDR dashboard and integration workers" `
-            -StartupType Automatic | Out-Null
-    }
-    else {
-        & sc.exe config $serviceName "binPath= $serviceCommand" | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Failed to update the dashboard Windows service." }
-    }
-    Set-Service -Name $serviceName -StartupType Automatic
-    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
-    & sc.exe failureflag $serviceName 1 | Out-Null
-    Start-Service -Name $serviceName -ErrorAction Stop
+    $userId = "$env:USERDOMAIN\$env:USERNAME"
+    $action = New-ScheduledTaskAction -Execute $executable `
+        -Argument "--contentRoot `"$sourceRoot`"" -WorkingDirectory $sourceRoot
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
+    $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal `
+        -Settings $settings -Description "Persistent DigiAhan CDR dashboard with automatic recovery" -Force | Out-Null
+    Start-ScheduledTask -TaskName $taskName
 }
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {

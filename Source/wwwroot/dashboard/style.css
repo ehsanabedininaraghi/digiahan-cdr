@@ -17,6 +17,12 @@
 .query-metrics{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;padding:12px;background:#f7f9fc;border-radius:10px;color:var(--muted);font-size:11px;direction:rtl}
 td small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
 .direction-in{color:#0d8b6c}.direction-out{color:#285eb5}
+.insight-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.insight-grid article{padding:14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fbfdff,#f5f8fc);font-size:12px;line-height:1.9;color:#405069}
+.insight-grid article b{display:block;color:var(--ink);font-size:14px;margin-bottom:3px}
+.quality-good{color:var(--green);font-weight:700}.quality-warn{color:#a86b08;font-weight:700}.quality-bad{color:var(--red);font-weight:700}
+@media(max-width:1000px){.insight-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.insight-grid{grid-template-columns:1fr}}
 
 .hidden{display:none!important}
 .report-progress{position:fixed;top:14px;left:14px;z-index:9999;width:min(420px,calc(100% - 28px));pointer-events:none}

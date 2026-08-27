@@ -37,3 +37,4 @@ Thumbs.db
 .codex-pr-body.md
 **/__pycache__/
 *.pyc
+.dotnet-cli/

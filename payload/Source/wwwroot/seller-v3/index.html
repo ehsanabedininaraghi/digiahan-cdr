@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>میزکار فروش هوشمند | دیجی‌آهن</title>
+  <link rel="stylesheet" href="/seller-v3/style.css?v=4.4.0">
+</head>
+<body>
+  <section id="loginView" class="auth-shell hidden">
+    <form id="loginForm" class="auth-card" autocomplete="on">
+      <div class="brand-mark">D</div>
+      <p class="eyebrow">DIGIAHAN SALES OS</p>
+      <h1>میزکار فروش هوشمند</h1>
+      <p class="muted">با همان نام کاربری میزکار فروش وارد شوید.</p>
+      <label>نام کاربری<input id="username" name="username" autocomplete="username" required></label>
+      <label>رمز عبور<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary wide" type="submit">ورود امن</button>
+      <p id="loginError" class="form-error" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <section id="disabledView" class="auth-shell hidden">
+    <div class="auth-card disabled-card">
+      <span class="status-orb"></span>
+      <p class="eyebrow">PILOT CONTROL</p>
+      <h1>نسخه آزمایشی هنوز برای شما فعال نیست</h1>
+      <p class="muted">میزکار فعلی فروش بدون تغییر در دسترس است. فعال‌سازی این نسخه فقط برای کاربران پایلوت انجام می‌شود.</p>
+      <a class="primary link-button" href="/seller-v2/index.html">ورود به میزکار فعلی</a>
+      <button id="disabledLogout" class="ghost wide" type="button">خروج</button>
+    </div>
+  </section>
+
+  <main id="workspace" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand-row">
+        <div class="brand-mark small">D</div>
+        <div><p class="eyebrow">DIGIAHAN SALES OS</p><h1>میزکار فروش</h1></div>
+        <span class="pilot-badge">پایلوت v4.4.0</span>
+      </div>
+      <div class="user-row">
+        <div><strong id="sellerName">—</strong><small id="lastRefresh">—</small></div>
+        <button id="refreshButton" class="icon-button" title="تازه‌سازی" type="button">↻</button>
+        <button id="logoutButton" class="ghost" type="button">خروج</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div><p class="eyebrow light">NO LOST CUSTOMER</p><h2>امروز هیچ مشتری بدون اقدام بعدی نمی‌ماند.</h2></div>
+      <button id="newLeadButton" class="primary accent" type="button">+ سرنخ جدید</button>
+    </section>
+
+    <section class="stats-grid" aria-label="شاخص‌های امروز">
+      <article><span>سرنخ باز</span><strong id="statLeads">۰</strong></article>
+      <article><span>فرصت فعال</span><strong id="statOpportunities">۰</strong></article>
+      <article><span>کار امروز</span><strong id="statDue">۰</strong></article>
+      <article class="danger-stat"><span>عقب‌افتاده</span><strong id="statOverdue">۰</strong></article>
+    </section>
+
+    <section class="workspace-grid">
+      <article class="panel queue-panel">
+        <header class="panel-header"><div><p class="eyebrow">NEXT BEST ACTION</p><h3>صف کار من</h3></div><span id="queueCount" class="count-pill">۰</span></header>
+        <div id="workQueue" class="work-list empty-state">هنوز کاری برای نمایش نیست.</div>
+      </article>
+
+      <article class="panel focus-panel">
+        <header class="panel-header"><div><p class="eyebrow">FOCUS</p><h3>اقدام انتخاب‌شده</h3></div></header>
+        <div id="focusEmpty" class="focus-empty"><span>✓</span><p>یک کار، سرنخ یا فرصت را انتخاب کنید.</p></div>
+        <div id="focusContent" class="hidden">
+          <div class="customer-line"><div class="avatar" id="focusAvatar">م</div><div><h4 id="focusCustomer">—</h4><a id="focusPhone" href="#">—</a></div></div>
+          <dl class="focus-details">
+            <div><dt>موضوع</dt><dd id="focusTitle">—</dd></div>
+            <div><dt>وضعیت</dt><dd id="focusStatus">—</dd></div>
+            <div><dt>موعد</dt><dd id="focusDue">—</dd></div>
+          </dl>
+          <div id="focusActions" class="focus-actions"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="pipeline-grid">
+      <article class="panel">
+        <header class="panel-header"><div><p class="eyebrow">LEADS</p><h3>سرنخ‌های باز</h3></div></header>
+        <div id="leadList" class="compact-list empty-state">سرنخ بازی وجود ندارد.</div>
+      </article>
+      <article class="panel">
+        <header class="panel-header"><div><p class="eyebrow">PIPELINE</p><h3>فرصت‌های فعال</h3></div></header>
+        <div id="opportunityList" class="compact-list empty-state">فرصت فعالی وجود ندارد.</div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="leadDialog">
+    <form id="leadForm" method="dialog" class="dialog-form">
+      <header><div><p class="eyebrow">NEW LEAD</p><h3>ثبت سرنخ جدید</h3></div><button class="dialog-close" value="cancel" type="submit">×</button></header>
+      <label>جست‌وجوی مشتری<input id="customerSearch" placeholder="نام، شرکت یا شماره تلفن" autocomplete="off"></label>
+      <div id="customerResults" class="search-results muted">حداقل یک حرف یا عدد وارد کنید.</div>
+      <input id="leadIdentityId" type="hidden">
+      <p id="selectedCustomer" class="selected-customer hidden"></p>
+      <div class="form-grid">
+        <label>عنوان سرنخ<input id="leadTitle" maxlength="300" required></label>
+        <label>محصول / نیاز<input id="leadProduct" maxlength="500"></label>
+        <label>اقدام بعدی<select id="leadAction"><option value="CALL_BACK">تماس مجدد</option><option value="SEND_PRICE">ارسال قیمت</option><option value="CHECK_STOCK">بررسی موجودی</option><option value="FOLLOW_UP">پیگیری</option></select></label>
+        <label>زمان اقدام بعدی<input id="leadNextAt" type="datetime-local" required></label>
+        <label>اولویت<select id="leadPriority"><option value="2">عادی</option><option value="3">مهم</option><option value="4">فوری</option><option value="1">کم</option></select></label>
+      </div>
+      <label>یادداشت<textarea id="leadNote" maxlength="1500" rows="3"></textarea></label>
+      <p id="leadError" class="form-error"></p>
+      <footer><button class="ghost" value="cancel" type="submit">انصراف</button><button id="saveLeadButton" class="primary" type="button">ثبت سرنخ و اقدام بعدی</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="qualifyDialog">
+    <form class="dialog-form">
+      <header><div><p class="eyebrow">QUALIFY</p><h3>تبدیل سرنخ به فرصت فروش</h3></div><button class="dialog-close" data-close type="button">×</button></header>
+      <input id="qualifyLeadId" type="hidden">
+      <div class="form-grid">
+        <label>عنوان فرصت<input id="qualifyTitle" maxlength="300" required></label>
+        <label>محصول / نیاز<input id="qualifyProduct" maxlength="500"></label>
+        <label>مقدار<input id="qualifyQuantity" type="number" min="0" step="0.001"></label>
+        <label>واحد<input id="qualifyUnit" maxlength="30"></label>
+        <label>ارزش تخمینی (ریال)<input id="qualifyAmount" type="number" min="0" step="1"></label>
+        <label>اقدام بعدی<select id="qualifyAction"><option value="CONFIRM_NEED">تأیید نیاز</option><option value="SEND_PRICE">ارسال قیمت</option><option value="SEND_QUOTE">ارسال پیش‌فاکتور</option><option value="FOLLOW_UP">پیگیری</option></select></label>
+        <label>زمان اقدام<input id="qualifyNextAt" type="datetime-local" required></label>
+        <label>تاریخ احتمالی تصمیم<input id="qualifyCloseAt" type="datetime-local"></label>
+      </div>
+      <label>یادداشت<textarea id="qualifyNote" maxlength="1500" rows="3"></textarea></label>
+      <p id="qualifyError" class="form-error"></p>
+      <footer><button class="ghost" data-close type="button">انصراف</button><button id="saveOpportunityButton" class="primary" type="button">ایجاد فرصت فروش</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="stageDialog">
+    <form class="dialog-form">
+      <header><div><p class="eyebrow">PIPELINE</p><h3>تغییر مرحله فرصت</h3></div><button class="dialog-close" data-close type="button">×</button></header>
+      <input id="stageOpportunityId" type="hidden">
+      <div class="form-grid">
+        <label>مرحله<select id="stageValue"><option value="NEEDS_CONFIRMED">نیاز تأیید شد</option><option value="PRICE_GIVEN">قیمت داده شد</option><option value="QUOTE_SENT">پیش‌فاکتور ارسال شد</option><option value="DECISION">در انتظار تصمیم</option><option value="NEGOTIATION">مذاکره</option><option value="ON_HOLD">متوقف موقت</option><option value="WON">فروش قطعی</option><option value="LOST">از دست رفته</option></select></label>
+        <label>اقدام بعدی<input id="stageAction" value="FOLLOW_UP" maxlength="60"></label>
+        <label>زمان اقدام<input id="stageNextAt" type="datetime-local"></label>
+        <label id="lostReasonLabel" class="hidden">دلیل از دست رفتن<input id="stageLostReason" maxlength="300"></label>
+      </div>
+      <label>یادداشت<textarea id="stageNote" maxlength="1500" rows="3"></textarea></label>
+      <p id="stageError" class="form-error"></p>
+      <footer><button class="ghost" data-close type="button">انصراف</button><button id="saveStageButton" class="primary" type="button">ثبت مرحله و اقدام بعدی</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="completeDialog">
+    <form class="dialog-form narrow">
+      <header><div><p class="eyebrow">COMPLETE</p><h3>ثبت نتیجه اقدام</h3></div><button class="dialog-close" data-close type="button">×</button></header>
+      <input id="completeWorkItemId" type="hidden">
+      <label>نتیجه<select id="completeOutcome"><option value="DONE">انجام شد</option><option value="NO_ANSWER">پاسخ نداد</option><option value="RESCHEDULED">زمان دیگری هماهنگ شد</option><option value="CUSTOMER_DECLINED">مشتری منصرف شد</option><option value="NOT_RELEVANT">نامرتبط</option></select></label>
+      <label>توضیح<textarea id="completeNote" maxlength="1000" rows="4"></textarea></label>
+      <p id="completeError" class="form-error"></p>
+      <footer><button class="ghost" data-close type="button">انصراف</button><button id="completeButton" class="primary" type="button">ثبت نتیجه</button></footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/version.js?v=4.4.0"></script>
+  <script src="/seller-v3/app.js?v=4.4.0"></script>
+</body>
+</html>

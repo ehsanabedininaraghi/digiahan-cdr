@@ -14,6 +14,9 @@ assert(!html.match(/name="outcome"[^>]*checked/),"An interaction outcome must no
 assert(app.includes('new EventSource("/api/seller-v2/live-events"'),"Live seller event stream is missing.");
 assert(app.includes('method:editingInteractionId?"PUT":"POST"'),"Interaction edit path is missing.");
 assert(app.includes("normalizePhone(currentCustomerPhone)"),"Client phone normalization is missing.");
+assert(app.includes('data-owner="${x.isMine?"mine":x.eventType==="INVOICE"?"system":"others"}"'),"Timeline owner classification is missing.");
+assert(app.includes('data-order="${x.outcome==="ORDER"}"'),"Timeline order classification is missing.");
+assert(app.includes('activeTimelineFilter=button.dataset.filter||"all";applyTimelineFilter()'),"Timeline filters are not wired to rendered rows.");
 assert(dashboardCss.includes("pointer-events:none"),"Dashboard refresh indicator blocks user interaction.");
 assert(!dashboardCss.includes(".report-progress{position:fixed;inset:0"),"Blocking full-screen dashboard overlay returned.");
 const htmlIds=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>گزارش تعاملات فروش | دیجی‌آهن</title>
+  <link rel="stylesheet" href="./style.css?v=444">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/dashboard">دیجی‌آهن <span>گزارش فروش</span></a><nav><a href="/dashboard">داشبورد اصلی</a><a class="active" href="#daily">تعاملات فروش</a><a href="#calls">تماس‌های پیگیری‌پذیر</a><a href="/seller-admin">کاربران فروش</a></nav></header>
+<main>
+  <section class="hero"><div><p class="eyebrow">گزارش یکپارچه در خود داشبورد</p><h1>دفتر فعالیت فروشندگان</h1><p>از تماس‌های منتسب و بدون نتیجه تا تمام تعامل‌ها، قیمت‌ها، پیگیری‌ها و سفارش‌های ثبت‌شده.</p></div><a href="/dashboard" class="back">بازگشت به داشبورد</a></section>
+  <form id="rangeForm" class="filters"><label>از تاریخ<input id="startDate" type="date" required></label><label>تا تاریخ<input id="endDate" type="date" required></label><button>نمایش گزارش</button><small id="rangeCaption">—</small></form>
+  <div id="error" class="error hidden"></div>
+
+  <section id="daily" class="panel"><div class="panel-head"><div><h2>عملکرد روزانهٔ هر فروشنده</h2><p>تماس یکتا، پاسخ، عدم پاسخ، تماسِ بی‌نتیجه و تعامل‌های ثبت‌شده در یک ردیف قابل مقایسه‌اند.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>روز</th><th>فروشنده</th><th>داخلی</th><th>تماس یکتا</th><th>پاسخ</th><th>بی‌پاسخ</th><th>بدون نتیجه</th><th>تعامل</th><th>قیمت</th><th>پیگیری</th><th>سفارش</th><th>عدم خرید</th></tr></thead><tbody id="dailyRows"><tr><td colspan="12">در حال دریافت…</td></tr></tbody></table></div>
+  </section>
+
+  <section id="raw" class="panel"><div class="panel-head"><div><h2>دادهٔ خام تعاملات ثبت‌شده</h2><p id="rawCount">—</p></div><select id="sellerFilter"><option value="all">همهٔ فروشنده‌ها</option></select></div>
+    <div class="table-wrap"><table><thead><tr><th>زمان</th><th>فروشنده</th><th>مشتری / شماره</th><th>نتیجه</th><th>شرح ثبت‌شده</th><th>پیگیری</th></tr></thead><tbody id="rawRows"><tr><td colspan="6">در حال دریافت…</td></tr></tbody></table></div>
+  </section>
+
+  <section id="calls" class="panel"><div class="panel-head"><div><h2>تماس‌های یکتا و قابل پیگیری</h2><p id="callCount">همهٔ تماس‌های یکتا در بازهٔ انتخابی</p></div><div class="call-filter"><input id="callSearch" placeholder="شماره، نام، شرکت یا LinkedID"><select id="callStatus"><option value="all">همهٔ وضعیت‌ها</option><option value="answered">پاسخ داده‌شده</option><option value="missed">بی‌پاسخ</option><option value="new">مشتری جدید</option><option value="known">مشتری شناخته‌شده</option></select></div></div>
+    <div class="table-wrap"><table><thead><tr><th>زمان</th><th>شماره مشتری</th><th>پاسخ‌دهنده</th><th>مشتری</th><th>شرکت</th><th>جهت</th><th>وضعیت</th><th>مدت</th><th>LinkedID</th></tr></thead><tbody id="callRows"><tr><td colspan="9">در حال دریافت…</td></tr></tbody></table></div>
+  </section>
+</main>
+<div id="toast" role="status"></div><script src="/version.js?v=444" defer></script><script src="./app.js?v=444" defer></script>
+</body></html>

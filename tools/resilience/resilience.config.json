@@ -1,0 +1,10 @@
+{
+  "RepositoryRoot": "D:\\DigiAhan\\CDR4.0",
+  "HealthUrl": "http://127.0.0.1:5088/health",
+  "DashboardUrl": "http://127.0.0.1:5088/dashboard",
+  "CheckIntervalSeconds": 15,
+  "StartupGraceSeconds": 60,
+  "FailureThreshold": 3,
+  "RestartCooldownSeconds": 30,
+  "LogRetentionDays": 30
+}

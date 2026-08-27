@@ -2,8 +2,10 @@ const $=id=>document.getElementById(id);
 const fa=n=>new Intl.NumberFormat("fa-IR",{minimumIntegerDigits:2,useGrouping:false}).format(n);
 let callInterval=null,callSeconds=0,liveStream=null;
 let authenticated=false,readOnlyCustomer=false,currentCustomerKnown=false;
+let currentCallRequiresInteraction=false;
 let currentCustomerPhone="",currentCallLinkedId=null,currentSeller=null,editingInteractionId=null,editingOccurredAtUtc=null;
 let lastLiveEventKey="",lastEnrichedEventKey="",livePollBusy=false,searchTimer=null;
+let activeTimelineFilter="all";
 const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]);
 const newId=()=>{
   const bytes=new Uint8Array(16);
@@ -161,40 +163,64 @@ function endCall(){
   clearInterval(callInterval);callInterval=null;
   $("activeCallCard").classList.add("hidden");
   $("simulateCall").disabled=false;$("simulateCall").innerHTML="<span>☎</span> شبیه‌سازی تماس";
-  openDrawer("call");
+  if(currentCallRequiresInteraction)openDrawer("call");
 }
 
-function showLiveCall(card,publishedAtUtc,serverNowUtc){
+function showLiveCall(data){
+  const card=data?.card;
   if(!card)return;
   const key=card.linkedId||`${card.extension}|${card.callerNumber}|${card.eventTimeUtc}`;
-  const isNew=key!==lastLiveEventKey;
+  const state=String(data.state||"RINGING").toUpperCase();
+  const statusKey=`${key}|${state}|${data.answeredExtension||""}|${data.endedAtUtc||""}`;
+  const isNew=statusKey!==lastLiveEventKey;
   lastLiveEventKey=key;
   if(localStorage.getItem("sellerV2DismissedCall")===key)return;
-  const serverNow=new Date(serverNowUtc||new Date()).getTime();
-  const published=new Date(publishedAtUtc||card.eventTimeUtc).getTime();
+  const serverNow=new Date(data.serverNowUtc||new Date()).getTime();
+  const published=new Date(data.publishedAtUtc||card.eventTimeUtc).getTime();
   const age=Math.max(0,serverNow-published);
   if(!Number.isFinite(age)||age>10*60*1000)return;
   currentCustomerPhone=card.callerNumber;currentCallLinkedId=card.linkedId;currentCustomerKnown=Boolean(card.isKnownCustomer);
+  currentCallRequiresInteraction=Boolean(data.requiresInteraction);
   $("customerName").textContent=card.companyName||card.customerName||"مشتری جدید";
   $("contactName").textContent=card.customerName||"نام ثبت نشده";$("customerPhone").textContent=card.callerNumber;
   $("customerState").textContent=card.isKnownCustomer?"مشتری فعال":"مشتری جدید";
   if(card.identitySource&&card.identitySource!=="PENDING"&&lastEnrichedEventKey!==key){
     lastEnrichedEventKey=key;loadWorkspace(card.callerNumber).catch(console.error);
   }
-  if(!isNew)return;
+  if(!isNew&&$("activeCallCard").dataset.statusKey===statusKey)return;
+  $("activeCallCard").dataset.statusKey=statusKey;
   clearInterval(callInterval);callInterval=null;
   $("activeCallCard").classList.remove("hidden");
-  $("liveCallIdentity").textContent=`${card.customerName||card.companyName||"مشتری جدید"} · ${card.callerNumber}`;
+  const identity=`${card.customerName||card.companyName||"مشتری جدید"} · ${card.callerNumber}`;
+  const answerer=data.answeredSellerName||data.answeredExtension&&`داخلی ${data.answeredExtension}`;
+  $("liveCallIdentity").textContent=state==="ANSWERED"
+    ? `${identity} · پاسخ‌دهنده: ${answerer||"در حال شناسایی"}`
+    : state==="ENDED"
+      ? `${identity} · پاسخ‌دهنده: ${answerer||"بدون پاسخ"}`
+      : `${identity} · هنوز کسی تلفن را برنداشته است`;
+  $("liveCallStatus").textContent=state==="ANSWERED"
+    ? `${answerer||"یک فروشنده"} در حال مکالمه است`
+    : state==="ENDED"
+      ? (data.requiresInteraction?"مکالمه شما تمام شد؛ نتیجه را ثبت کنید":"مکالمه پایان یافت")
+      : "تماس ورودی؛ هنوز کسی پاسخ نداده است";
   $("simulateCall").disabled=true;$("simulateCall").innerHTML="<span>●</span> تماس واقعی";
-  callSeconds=Math.max(0,Math.floor(age/1000));
-  if(!callInterval)callInterval=setInterval(()=>{callSeconds++;$("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`},1000);
-  toast(`تماس واقعی ${card.customerName||card.companyName||card.callerNumber} وارد شد`);
+  $("endCall").textContent=data.requiresInteraction?"ثبت نتیجه مکالمه":"بستن اعلان";
+  const timerOrigin=state==="ANSWERED"&&data.answeredAtUtc
+    ? new Date(data.answeredAtUtc).getTime()
+    : published;
+  callSeconds=state==="ENDED"
+    ? Number(data.talkSeconds||0)
+    : Math.max(0,Math.floor((serverNow-timerOrigin)/1000));
+  const renderTimer=()=>{$("callTimer").textContent=`${fa(Math.floor(callSeconds/60))}:${fa(callSeconds%60)}`};
+  renderTimer();
+  if(state!=="ENDED")callInterval=setInterval(()=>{callSeconds++;renderTimer()},1000);
+  if(isNew&&state==="RINGING")toast(`تماس واقعی ${card.customerName||card.companyName||card.callerNumber} وارد شد`);
 }
 
 async function pollLiveCall(){
   if(!authenticated||livePollBusy||location.protocol==="file:")return;
   livePollBusy=true;
-  try{const data=await api("/api/seller-v2/current-call");if(data)showLiveCall(data.card,data.publishedAtUtc,data.serverNowUtc)}catch(error){if(error.message!=="UNAUTHORIZED")console.warn(error)}
+  try{const data=await api("/api/seller-v2/current-call");if(data)showLiveCall(data)}catch(error){if(error.message!=="UNAUTHORIZED")console.warn(error)}
   finally{livePollBusy=false}
 }
 
@@ -203,7 +229,7 @@ function startLiveEvents(){
   if(liveStream)liveStream.close();
   liveStream=new EventSource("/api/seller-v2/live-events",{withCredentials:true});
   liveStream.addEventListener("call",event=>{
-    try{const data=JSON.parse(event.data);showLiveCall(data.card,data.publishedAtUtc,data.serverNowUtc)}catch(error){console.warn(error)}
+    try{showLiveCall(JSON.parse(event.data))}catch(error){console.warn(error)}
   });
   liveStream.onerror=()=>{if(authenticated)setTimeout(pollLiveCall,500)};
 }
@@ -241,6 +267,7 @@ async function saveInteraction(){
 }
 
 function formatDate(value){return new Intl.DateTimeFormat("fa-IR-u-ca-persian",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Tehran"}).format(new Date(value))}
+function formatPerformanceDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?"—":new Intl.DateTimeFormat("fa-IR-u-ca-persian",{year:"numeric",month:"short",day:"numeric",timeZone:"Asia/Tehran"}).format(date)}
 function relativeDate(value){if(!value)return"—";const days=Math.floor((Date.now()-new Date(value).getTime())/86400000);return days<=0?"امروز":`${days.toLocaleString("fa-IR")} روز پیش`}
 function money(value){return new Intl.NumberFormat("fa-IR",{maximumFractionDigits:0}).format(Number(value)||0)}
 function renderBalance(value,creditLimit){
@@ -251,6 +278,25 @@ function renderBalance(value,creditLimit){
   $("snapshotBalanceStatus").textContent=creditLimit==null?state:`${state} · سقف اعتبار ${money(creditLimit)} ریال`;
 }
 function outcomeLabel(value){return({ORDER:"سفارش ثبت شد",DECIDING:"در حال تصمیم‌گیری",FOLLOW_UP:"نیاز به پیگیری",LOST:"خرید انجام نشد",NON_SALES:"تماس غیر فروش"})[value]||value}
+
+function applyTimelineFilter(){
+  const items=[...document.querySelectorAll("#timeline .timeline-item")];
+  let visibleCount=0;
+  items.forEach(item=>{
+    const visible=activeTimelineFilter==="all"
+      ||(activeTimelineFilter==="orders"&&item.dataset.order==="true")
+      ||item.dataset.owner===activeTimelineFilter;
+    item.classList.toggle("hidden",!visible);
+    if(visible)visibleCount++;
+  });
+  document.querySelector("#timeline .day-label")?.classList.toggle("hidden",items.length>0&&visibleCount===0);
+  let empty=document.getElementById("timelineFilterEmpty");
+  if(!empty&&items.length){
+    empty=document.createElement("div");empty.id="timelineFilterEmpty";empty.className="empty-list hidden";
+    empty.textContent="در این دسته سابقه‌ای ثبت نشده است.";$("timeline").appendChild(empty);
+  }
+  empty?.classList.toggle("hidden",visibleCount>0||items.length===0);
+}
 
 async function editInteraction(id){
   try{
@@ -275,13 +321,15 @@ async function editInteraction(id){
 async function loadWorkspace(phone="",lookupOnly=false){
   const data=await api(`/api/seller-v2/workspace${phone?`?phone=${encodeURIComponent(phone)}&readOnly=${lookupOnly?"true":"false"}`:""}`);
   const seller=data.seller,stats=data.stats,card=data.customer;currentSeller=seller;
+  const canMap=seller.extensions.some(x=>["201","202","215","216"].includes(x));
+  $("mappingNav").classList.toggle("hidden",!canMap);
+  if(canMap)loadMappingBadge();
   authenticated=true;readOnlyCustomer=Boolean(data.readOnlyCustomer);
   $("sidebarSellerName").textContent=seller.displayName;$("welcomeName").textContent=seller.displayName.split(" ")[0];
   $("sidebarSellerExtension").textContent=`کارشناس فروش · داخلی ${seller.extensions.join(" و ")}`;
   $("sidebarAvatar").textContent=seller.displayName.split(/\s+/).slice(0,2).map(x=>x[0]||"").join("");
   $("statOverdue").textContent=stats.overdue;$("statDue").textContent=stats.dueToday;$("statConversations").textContent=stats.conversations;
-  $("statPriced").textContent=stats.priced;$("statOrders").textContent=stats.orders;$("statLost").textContent=`${stats.lost} عدم خرید`;
-  $("missingResults").textContent=`${stats.missingResults} نتیجه ناقص`;
+  $("statInteractions").textContent=stats.interactions;$("statPriced").textContent=stats.priced;$("statOrders").textContent=stats.orders;$("statLost").textContent=stats.lost;
   $("qualityPercent").textContent=`${stats.qualityPercent.toLocaleString("fa-IR")}٪`;
   $("qualityBar").style.width=`${stats.qualityPercent}%`;
   $("qualityCompleted").textContent=Math.max(0,stats.conversations-stats.missingResults).toLocaleString("fa-IR");
@@ -289,6 +337,20 @@ async function loadWorkspace(phone="",lookupOnly=false){
   $("qualityMissingRow").classList.toggle("done",stats.missingResults===0);
   $("qualityMissingRow").classList.toggle("warning",stats.missingResults>0);
   $("navTaskCount").textContent=(stats.dueToday+stats.overdue).toLocaleString("fa-IR");
+  const yesterday=data.yesterday||{};
+  $("yesterdayConversations").textContent=Number(yesterday.conversations||0).toLocaleString("fa-IR");
+  $("yesterdayInteractions").textContent=Number(yesterday.interactions||0).toLocaleString("fa-IR");
+  $("yesterdayOrders").textContent=Number(yesterday.orders||0).toLocaleString("fa-IR");
+  $("yesterdayLost").textContent=Number(yesterday.lost||0).toLocaleString("fa-IR");
+  $("yesterdayMissing").textContent=Number(yesterday.missingResults||0).toLocaleString("fa-IR");
+  const performance=data.performance||{};
+  $("performanceInteractions").textContent=Number(performance.interactions||0).toLocaleString("fa-IR");
+  $("performanceOrders").textContent=Number(performance.orders||0).toLocaleString("fa-IR");
+  $("performanceLost").textContent=Number(performance.lost||0).toLocaleString("fa-IR");
+  $("performancePriced").textContent=Number(performance.priced||0).toLocaleString("fa-IR");
+  $("performanceSince").textContent=performance.firstInteractionUtc?formatDate(performance.firstInteractionUtc).split(" · ")[0]:"هنوز ثبت نشده";
+  const performanceRows=$("performanceRows"), days=performance.days||[];
+  performanceRows.innerHTML=days.length?days.map(day=>`<tr><td>${formatPerformanceDate(day.day)}</td><td>${Number(day.interactions||0).toLocaleString("fa-IR")}</td><td>${Number(day.orders||0).toLocaleString("fa-IR")}</td><td>${Number(day.lost||0).toLocaleString("fa-IR")}</td><td>${Number(day.priced||0).toLocaleString("fa-IR")}</td></tr>`).join(""):'<tr><td colspan="5">هنوز تعاملی ثبت نشده است.</td></tr>';
   $("readOnlyNotice").classList.toggle("hidden",!readOnlyCustomer);
   $("newInteraction").disabled=readOnlyCustomer;
   $("newInteraction").title=readOnlyCustomer?"نتیجه جست‌وجو فقط برای مشاهده است":"ثبت تعامل";
@@ -317,9 +379,19 @@ async function loadWorkspace(phone="",lookupOnly=false){
     const next=data.followUps[0],due=new Date(next.dueAtUtc);$("nextActionCard").classList.remove("hidden");$("nextSubject").textContent=next.subject;$("nextCustomer").textContent=next.customerDisplayName;
     $("nextDay").textContent=new Intl.DateTimeFormat("fa-IR-u-ca-persian",{month:"short",day:"numeric",timeZone:"Asia/Tehran"}).format(due);$("nextTime").textContent=new Intl.DateTimeFormat("fa-IR",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Tehran"}).format(due);$("nextStatus").textContent=due<new Date()?"عقب‌افتاده":"برنامه‌ریزی‌شده";
   }else{$("followUpList").innerHTML='<div class="empty-list">پیگیری بازی ندارید.</div>';$("nextActionCard").classList.add("hidden")}
-  $("timeline").innerHTML=data.timeline.length?`<div class="day-label"><span>سابقه ثبت‌شده</span></div>`+data.timeline.map(x=>`<article class="timeline-item ${x.isMine?"mine":"others"}" data-kind="${x.outcome==="ORDER"?"orders":x.isMine?"mine":"others"}"><div class="timeline-icon ${x.eventType==="CALL"?"quote":x.outcome==="LOST"?"lost":x.outcome==="ORDER"?"order":"follow"}">${x.eventType==="CALL"?"☎":x.outcome==="ORDER"?"▣":x.outcome==="LOST"?"×":"↗"}</div><div class="timeline-content"><header><div><b>${esc(x.title||outcomeLabel(x.outcome)||"تماس تلفنی")}</b><span>${esc(x.sellerDisplayName)}</span></div><time>${formatDate(x.eventAtUtc)}</time></header><p>${esc(x.description||"بدون توضیح")}</p><div class="tag-row">${x.productName?`<span>${esc(x.productName)} ${esc(x.productSize||"")}</span>`:""}${x.lossReason?`<span class="red-tag">${esc(x.lossReason)}</span>`:""}${x.eventType==="INTERACTION"&&x.isMine?`<button type="button" class="edit-interaction" data-edit-interaction="${x.id}">اصلاح نتیجه</button>`:""}</div></div></article>`).join(""):'<div class="empty-list">هنوز سابقه‌ای برای این مشتری ثبت نشده است.</div>';
+  $("timeline").innerHTML=data.timeline.length?`<div class="day-label"><span>سابقه ثبت‌شده</span></div>`+data.timeline.map(x=>`<article class="timeline-item ${x.isMine?"mine":"others"}" data-owner="${x.isMine?"mine":x.eventType==="INVOICE"?"system":"others"}" data-order="${x.outcome==="ORDER"}"><div class="timeline-icon ${x.eventType==="CALL"?"quote":x.outcome==="LOST"?"lost":x.outcome==="ORDER"?"order":"follow"}">${x.eventType==="CALL"?"☎":x.outcome==="ORDER"?"▣":x.outcome==="LOST"?"×":"↗"}</div><div class="timeline-content"><header><div><b>${esc(x.title||outcomeLabel(x.outcome)||"تماس تلفنی")}</b><span>${esc(x.sellerDisplayName)}</span></div><time>${formatDate(x.eventAtUtc)}</time></header><p>${esc(x.description||"بدون توضیح")}</p><div class="tag-row">${x.productName?`<span>${esc(x.productName)} ${esc(x.productSize||"")}</span>`:""}${x.lossReason?`<span class="red-tag">${esc(x.lossReason)}</span>`:""}${x.eventType==="INTERACTION"&&x.isMine?`<button type="button" class="edit-interaction" data-edit-interaction="${x.id}">اصلاح نتیجه</button>`:""}</div></div></article>`).join(""):'<div class="empty-list">هنوز سابقه‌ای برای این مشتری ثبت نشده است.</div>';
+  applyTimelineFilter();
   $("accessGate").classList.add("hidden");
   pollLiveCall();startLiveEvents();
+}
+
+async function loadMappingBadge(){
+  try{
+    const rows=await api("/api/seller-v2/accounting-mapping/pending?take=500");
+    const badge=$("mappingBadge"),count=Array.isArray(rows)?rows.length:0;
+    badge.textContent=count.toLocaleString("fa-IR");badge.classList.toggle("hidden",count===0);
+    $("mappingNav").title=count?`${count.toLocaleString("fa-IR")} ردیف نیازمند اتصال`:"مورد بازی باقی نمانده است";
+  }catch(error){console.warn("mapping badge",error)}
 }
 
 async function searchCustomers(query){
@@ -354,7 +426,7 @@ $("searchResults").addEventListener("click",async event=>{
 
 document.querySelectorAll(".segmented-control button").forEach(button=>button.addEventListener("click",()=>{
   document.querySelectorAll(".segmented-control button").forEach(x=>x.classList.remove("active"));button.classList.add("active");
-  document.querySelectorAll(".timeline-item").forEach(item=>item.classList.toggle("hidden",button.dataset.filter!=="all"&&item.dataset.kind!==button.dataset.filter));
+  activeTimelineFilter=button.dataset.filter||"all";applyTimelineFilter();
 }));
 document.querySelectorAll('input[name="outcome"]').forEach(input=>input.addEventListener("change",updateConditionalFields));
 $("timeline").addEventListener("click",event=>{const button=event.target.closest("[data-edit-interaction]");if(button)editInteraction(Number(button.dataset.editInteraction))});
@@ -410,6 +482,7 @@ $("logoutButton").addEventListener("click",async()=>{
   authenticated=false;location.reload();
 });
 $("completeMissing").addEventListener("click",()=>showMissingResults().catch(error=>toast(error.message)));
+$("mappingNav").addEventListener("click",()=>{location.href="/seller-mapping/"});
 
 setToday();resetInteractionForm();
 if(location.protocol!=="file:"){

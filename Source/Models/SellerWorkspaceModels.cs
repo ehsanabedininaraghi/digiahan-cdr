@@ -14,6 +14,7 @@ public sealed record SellerSessionResponse(
 
 public sealed record SellerTodayStats(
     int Conversations,
+    int Interactions,
     int Priced,
     int Orders,
     int Lost,
@@ -21,6 +22,21 @@ public sealed record SellerTodayStats(
     int DueToday,
     int Overdue,
     int QualityPercent);
+
+public sealed record SellerPerformanceDay(
+    DateTime Day,
+    int Interactions,
+    int Orders,
+    int Lost,
+    int Priced);
+
+public sealed record SellerPerformanceSummary(
+    DateTime? FirstInteractionUtc,
+    int Interactions,
+    int Orders,
+    int Lost,
+    int Priced,
+    IReadOnlyList<SellerPerformanceDay> Days);
 
 public sealed record SellerCustomerSearchRow(
     long IdentityId,
@@ -62,7 +78,21 @@ public sealed record SellerMissingResultRow(
 public sealed record SellerCurrentCallResponse(
     AgentCustomerCard Card,
     DateTime PublishedAtUtc,
-    DateTime ServerNowUtc);
+    DateTime ServerNowUtc,
+    string State,
+    string? AnsweredExtension,
+    string? AnsweredSellerName,
+    DateTime? AnsweredAtUtc,
+    DateTime? EndedAtUtc,
+    int TalkSeconds,
+    bool RequiresInteraction);
+
+public sealed record SellerCallLifecycle(
+    string State,
+    string? AnsweredExtension,
+    DateTime? AnsweredAtUtc,
+    DateTime? EndedAtUtc,
+    int TalkSeconds);
 
 public sealed record SellerFollowUpRow(
     long Id,
@@ -92,6 +122,8 @@ public sealed record SellerWorkspaceResponse(
     SellerSessionResponse Seller,
     AgentCustomerCard? Customer,
     SellerTodayStats Stats,
+    SellerTodayStats Yesterday,
+    SellerPerformanceSummary Performance,
     IReadOnlyList<SellerFollowUpRow> FollowUps,
     IReadOnlyList<SellerTimelineRow> Timeline,
     bool ReadOnlyCustomer,

@@ -10,7 +10,8 @@ public sealed record SalesDashboardSummary(
     decimal AverageInvoice,
     int VisitorCount,
     string SourceDatabase,
-    int FiscalYear);
+    int FiscalYear,
+    string? LatestFactorDate);
 
 public sealed record SalesByVisitorRow(
     int VisitorId,

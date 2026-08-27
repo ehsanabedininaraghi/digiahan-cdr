@@ -7,6 +7,12 @@ public sealed record VoipRingEventRequest(
     string? Channel,
     DateTime? EventTimeUtc);
 
+public sealed record VoipCallStatusRequest(
+    string LinkedId,
+    string State,
+    string? Extension,
+    DateTime? EventTimeUtc);
+
 public sealed record AgentCustomerCard(
     string Extension,
     string CallerNumber,

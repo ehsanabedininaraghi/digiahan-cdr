@@ -46,7 +46,9 @@ function sec(v) {
 
 function dt(v) {
     if (!v) return '—';
-    return new Date(v).toLocaleString('fa-IR-u-ca-persian', { hour12: false, timeZone: 'Asia/Tehran' });
+    const text = String(v);
+    const utcValue = /(?:Z|[+-]\d{2}:\d{2})$/i.test(text) ? text : `${text}Z`;
+    return new Date(utcValue).toLocaleString('fa-IR-u-ca-persian', { hour12: false, timeZone: 'Asia/Tehran' });
 }
 
 function dateOnly(v) {
@@ -331,11 +333,16 @@ async function load() {
     if (data.sellerPerformance) {
         $('sellerPerformanceRows').innerHTML = data.sellerPerformance.length
             ? data.sellerPerformance.map(x => `<tr>
-                <td><b>${esc(x.extension)}</b></td><td>${esc(extensionNames[x.extension] || '—')}</td>
-                <td>${fa(x.followUps)}</td><td>${fa(x.quotes)}</td><td>${fa(x.orders)}</td>
-                <td>${fa(x.noNeed)}</td><td>${fa(x.notes)}</td><td><b>${fa(x.totalOutcomes)}</b></td>
+                <td><b>${esc(x.displayName)}</b></td><td>${esc(x.extensions)}</td>
+                <td><b>${fa(x.handledCalls)}</b></td><td class="direction-in">${fa(x.inboundAnswered)}</td>
+                <td class="direction-out">${fa(x.outboundCalls)}</td><td>${fa(x.answeredCalls)}</td>
+                <td>${fa(x.interactions)}</td><td class="${x.missingInteractions ? 'quality-bad' : 'quality-good'}">${fa(x.missingInteractions)}</td>
+                <td><span class="${x.qualityPercent >= 90 ? 'quality-good' : x.qualityPercent >= 75 ? 'quality-warn' : 'quality-bad'}">${fa(x.qualityPercent)}٪</span></td>
+                <td>${sec(x.talkSeconds)}</td><td>${sec(x.averageTalkSeconds)}</td>
+                <td>${fa(x.quotes)}</td><td>${fa(x.followUps)}</td><td>${fa(x.orders)}</td><td>${fa(x.lost)}</td>
               </tr>`).join('')
-            : '<tr><td colspan="8">در این بازه نتیجه‌ای ثبت نشده است</td></tr>';
+            : '<tr><td colspan="15">در این بازه فروشندهٔ فعالی یا تماس منتسبی وجود ندارد.</td></tr>';
+        renderManagementInsights(data.summary, data.sellerPerformance);
     }
 
     if (data.systemHealth) {
@@ -365,6 +372,24 @@ async function load() {
         .map(([name, duration]) => `${name.replace('/api/', '')}: ${fa(duration)} ms`)
         .join(' | ');
     hideReportProgress();
+}
+
+function renderManagementInsights(summary, sellers) {
+    if (!summary || !sellers) return;
+    const bestAnswered = [...sellers].sort((a, b) => b.answeredCalls - a.answeredCalls)[0];
+    const bestQuality = [...sellers].filter(x => x.handledCalls > 0)
+        .sort((a, b) => b.qualityPercent - a.qualityPercent || b.handledCalls - a.handledCalls)[0];
+    const missing = sellers.reduce((sum, x) => sum + Number(x.missingInteractions || 0), 0);
+    const handled = sellers.reduce((sum, x) => sum + Number(x.handledCalls || 0), 0);
+    const completion = handled ? Math.round((handled - missing) * 100 / handled) : 100;
+    const answerRate = summary.totalCalls ? Math.round(summary.answeredCalls * 100 / summary.totalCalls) : 0;
+    const qualityClass = completion >= 90 ? 'quality-good' : completion >= 75 ? 'quality-warn' : 'quality-bad';
+    $('managementInsights').innerHTML = [
+        `<article><b>پاسخ‌گویی تیم: ${fa(answerRate)}٪</b>${fa(summary.answeredCalls)} تماس از ${fa(summary.totalCalls)} تماس یکتا پاسخ داده شده؛ زنگ هم‌زمان داخلی‌ها دوباره شمرده نمی‌شود.</article>`,
+        `<article><b>بیشترین پاسخ: ${esc(bestAnswered?.displayName || '—')}</b>${bestAnswered ? `${fa(bestAnswered.answeredCalls)} پاسخ و ${sec(bestAnswered.talkSeconds)} مکالمه` : 'هنوز تماس منتسبی وجود ندارد'}.</article>`,
+        `<article><b>بهترین ثبت تعامل: ${esc(bestQuality?.displayName || '—')}</b>${bestQuality ? `${fa(bestQuality.qualityPercent)}٪ تکمیل نتیجه از ${fa(bestQuality.handledCalls)} مکالمه` : 'هنوز داده کافی وجود ندارد'}.</article>`,
+        `<article><b>انضباط ثبت تیم: <span class="${qualityClass}">${fa(completion)}٪</span></b>${missing ? `${fa(missing)} مکالمهٔ واقعی هنوز تعامل ثبت‌شده ندارد.` : 'برای همهٔ مکالمه‌های منتسب نتیجه ثبت شده است.'}</article>`
+    ].join('');
 }
 
 function toast(text) {

@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f4f7fb">
   <title>میز کار فروش دیجی‌آهن</title>
-  <link rel="stylesheet" href="./style.css?v=4312">
-  <link rel="stylesheet" href="./balance.css?v=4312">
+  <link rel="stylesheet" href="./style.css?v=442">
+  <link rel="stylesheet" href="./enhancements.css?v=444">
+  <link rel="stylesheet" href="./balance.css?v=441">
 </head>
 <body>
   <div id="accessGate" class="access-gate">
@@ -31,6 +32,7 @@
         <button class="nav-item" data-view="tasks"><span class="nav-icon">✓</span><span>پیگیری‌ها</span><em id="navTaskCount">۰</em></button>
         <button class="nav-item" data-view="customers"><span class="nav-icon">♙</span><span>مشتریان</span></button>
         <button class="nav-item" data-view="reports"><span class="nav-icon">⌁</span><span>عملکرد من</span></button>
+        <button id="mappingNav" class="nav-item hidden" type="button"><span class="nav-icon">↔</span><span>اتصال فاکتور و موبایل</span><em id="mappingBadge" class="hidden">۰</em></button>
       </nav>
         <div class="sidebar-foot">
         <div id="sidebarAvatar" class="profile-avatar">—</div>
@@ -44,7 +46,7 @@
         <button id="menuButton" class="mobile-menu icon-button" aria-label="نمایش منو">☰</button>
         <div class="page-heading">
           <p id="todayLabel">—</p>
-          <h1>سلام <span id="welcomeName">همکار</span> <span>👋</span> <small class="page-version" data-app-version>v4.3.12</small></h1>
+          <h1>سلام <span id="welcomeName">همکار</span> <span>👋</span> <small class="page-version" data-app-version>v4.4.2</small></h1>
         </div>
         <label class="global-search">
           <span>⌕</span>
@@ -68,16 +70,26 @@
             <article class="metric-card urgent"><div class="metric-icon">!</div><div><span>پیگیری عقب‌افتاده</span><strong id="statOverdue">۰</strong><small>نیازمند اقدام فوری</small></div></article>
             <article class="metric-card"><div class="metric-icon blue">✓</div><div><span>پیگیری امروز</span><strong id="statDue">۰</strong><small>تا پایان ساعت کاری</small></div></article>
             <article class="metric-card"><div class="metric-icon violet">☎</div><div><span>مکالمه واقعی</span><strong id="statConversations">۰</strong><small><b class="positive">امروز</b> مکالمه پاسخ‌داده‌شده</small></div></article>
-            <article class="metric-card"><div class="metric-icon amber">◈</div><div><span>قیمت اعلام‌شده</span><strong id="statPriced">۰</strong><small id="missingResults">۰ نتیجه ناقص</small></div></article>
-            <article class="metric-card"><div class="metric-icon green">▣</div><div><span>سفارش امروز</span><strong id="statOrders">۰</strong><small><b class="positive" id="statLost">۰ عدم خرید</b> ثبت‌شده</small></div></article>
+            <article class="metric-card"><div class="metric-icon amber">◈</div><div><span>تعامل ثبت‌شده</span><strong id="statInteractions">۰</strong><small><span id="statPriced">۰</span> قیمت اعلام‌شده</small></div></article>
+            <article class="metric-card"><div class="metric-icon green">▣</div><div><span>سفارش امروز</span><strong id="statOrders">۰</strong><small><b class="positive" id="statLost">۰</b> عدم خرید ثبت‌شده</small></div></article>
           </div>
+          <details class="yesterday-report panel compact-report">
+            <summary><span><b>گزارش دیروز</b><small>تماس، تعامل و نتیجهٔ ثبت‌شده</small></span><span class="report-period">مشاهده جزئیات</span></summary>
+            <div class="yesterday-grid">
+              <div><span>مکالمه واقعی</span><b id="yesterdayConversations">۰</b></div>
+              <div><span>تعامل ثبت‌شده</span><b id="yesterdayInteractions">۰</b></div>
+              <div><span>سفارش</span><b id="yesterdayOrders">۰</b></div>
+              <div><span>عدم خرید</span><b id="yesterdayLost">۰</b></div>
+              <div><span>نتیجه ناقص</span><b id="yesterdayMissing">۰</b></div>
+            </div>
+          </details>
         </section>
 
         <section class="content-grid">
           <div class="main-column">
             <section id="activeCallCard" class="active-call-card hidden">
-              <div class="call-status-line"><span class="call-wave"><i></i><i></i><i></i><i></i></span><div><b>تماس ورودی در حال انجام</b><small id="liveCallIdentity">—</small></div><time id="callTimer">۰۰:۰۰</time></div>
-              <button id="endCall" class="danger-button">پایان تماس</button>
+              <div class="call-status-line"><span class="call-wave"><i></i><i></i><i></i><i></i></span><div><b id="liveCallStatus">تماس ورودی</b><small id="liveCallIdentity">—</small></div><time id="callTimer">۰۰:۰۰</time></div>
+              <button id="endCall" class="danger-button">بستن اعلان</button>
             </section>
 
             <section class="customer-card">
@@ -146,6 +158,12 @@
             </section>
           </aside>
         </section>
+
+        <details class="performance-history panel compact-report performance-bottom">
+          <summary><span><b>گردش عملکرد از شروع ثبت تعامل</b><small>روند روزانه و جمع نتایج شما</small></span><span id="performanceSince" class="report-period">—</span></summary>
+          <div class="performance-summary"><div><span>کل تعامل</span><b id="performanceInteractions">۰</b></div><div><span>سفارش</span><b id="performanceOrders">۰</b></div><div><span>عدم خرید</span><b id="performanceLost">۰</b></div><div><span>قیمت اعلام‌شده</span><b id="performancePriced">۰</b></div></div>
+          <div class="performance-table-wrap"><table class="performance-table"><thead><tr><th>روز</th><th>تعامل</th><th>سفارش</th><th>عدم خرید</th><th>قیمت</th></tr></thead><tbody id="performanceRows"><tr><td colspan="5">هنوز تعاملی ثبت نشده است.</td></tr></tbody></table></div>
+        </details>
       </main>
     </div>
   </div>
@@ -221,7 +239,7 @@
     <footer class="drawer-footer"><span></span><button id="saveInteraction" class="primary-button">ثبت نتیجه مکالمه</button></footer>
   </aside>
 
-  <script src="/version.js?v=4312" defer></script>
-  <script src="./app.js?v=4312"></script>
+  <script src="/version.js?v=444" defer></script>
+  <script src="./app.js?v=4441"></script>
 </body>
 </html>

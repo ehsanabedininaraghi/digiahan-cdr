@@ -20,6 +20,8 @@ $backupRoot = Join-Path $RepositoryRoot "_backups\v$version-$stamp"
 $dashboardStopped = $false
 $filesInstalled = $false
 $serviceName = "DigiAhanCdrDashboard"
+$taskName = "DigiAhan CDR Dashboard"
+$accountingTaskName = "DigiAhan Accounting Bridge Interactive"
 
 function Get-RepositoryReceiverProcessIds {
     param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
@@ -37,6 +39,10 @@ function Get-RepositoryReceiverProcessIds {
 }
 
 function Stop-DashboardService {
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($null -ne $task -and $task.State -ne "Ready") {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    }
     $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
     if ($null -ne $service -and $service.Status -ne [ServiceProcess.ServiceControllerStatus]::Stopped) {
         Stop-Service -Name $serviceName -Force -ErrorAction Stop
@@ -52,25 +58,138 @@ function Install-AndStartDashboardService {
         throw "Dashboard executable was not found: $executable"
     }
 
-    $serviceCommand = '"' + $executable + '" --contentRoot "' + $ExpectedSourceRoot + '"'
-    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-    if ($null -eq $service) {
-        New-Service -Name $serviceName -BinaryPathName $serviceCommand `
-            -DisplayName "DigiAhan CDR Dashboard" -Description "DigiAhan CDR dashboard and integration workers" `
-            -StartupType Automatic | Out-Null
+    $userId = "$env:USERDOMAIN\$env:USERNAME"
+    $action = New-ScheduledTaskAction -Execute $executable `
+        -Argument "--contentRoot `"$ExpectedSourceRoot`"" -WorkingDirectory $ExpectedSourceRoot
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
+    $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal `
+        -Settings $settings -Description "Persistent DigiAhan CDR dashboard with automatic recovery" -Force | Out-Null
+    Start-ScheduledTask -TaskName $taskName
+}
+
+function Grant-DashboardServiceSqlAccessV441 {
+    param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
+    $runtimeConfigPath = Join-Path $ExpectedSourceRoot "appsettings.json"
+    if (-not (Test-Path -LiteralPath $runtimeConfigPath -PathType Leaf)) { return }
+    $runtimeConfig = Get-Content -LiteralPath $runtimeConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $runtimeConnection = [string]$runtimeConfig.ConnectionStrings.DigiAhanCdr
+    $connectionBuilder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($runtimeConnection)
+    if (-not $connectionBuilder.IntegratedSecurity) { return }
+    $databaseName = [string]$connectionBuilder.InitialCatalog
+    if ([string]::IsNullOrWhiteSpace($databaseName)) { throw "Integrated-security connection has no database name." }
+    $escapedDatabase = $databaseName.Replace("]","]]")
+    $connection = New-Object System.Data.SqlClient.SqlConnection($runtimeConnection)
+    try {
+        $connection.Open()
+        $command = $connection.CreateCommand()
+        $command.CommandTimeout = 60
+        $command.CommandText = @"
+IF SUSER_ID(N'NT SERVICE\DigiAhanCdrDashboard') IS NULL
+    CREATE LOGIN [NT SERVICE\DigiAhanCdrDashboard] FROM WINDOWS;
+USE [$escapedDatabase];
+IF USER_ID(N'NT SERVICE\DigiAhanCdrDashboard') IS NULL
+    CREATE USER [NT SERVICE\DigiAhanCdrDashboard] FOR LOGIN [NT SERVICE\DigiAhanCdrDashboard];
+IF IS_ROLEMEMBER(N'db_datareader',N'NT SERVICE\DigiAhanCdrDashboard')<>1
+    ALTER ROLE [db_datareader] ADD MEMBER [NT SERVICE\DigiAhanCdrDashboard];
+IF IS_ROLEMEMBER(N'db_datawriter',N'NT SERVICE\DigiAhanCdrDashboard')<>1
+    ALTER ROLE [db_datawriter] ADD MEMBER [NT SERVICE\DigiAhanCdrDashboard];
+GRANT EXECUTE TO [NT SERVICE\DigiAhanCdrDashboard];
+GRANT VIEW DEFINITION TO [NT SERVICE\DigiAhanCdrDashboard];
+"@
+        $command.ExecuteNonQuery() | Out-Null
+    }
+    finally { $connection.Dispose() }
+}
+
+function Install-AndStartDashboardServiceV441 {
+    param([Parameter(Mandatory = $true)][string]$ExpectedSourceRoot)
+
+    $executable = Join-Path $ExpectedSourceRoot "bin\Release\net8.0\DigiAhan.CDR.Receiver.exe"
+    if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+        throw "Dashboard executable was not found: $executable"
+    }
+    $binaryPath = [string]::Format('"{0}" --contentRoot "{1}"',$executable,$ExpectedSourceRoot)
+    $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -eq $existing) {
+        & sc.exe create $serviceName binPath= $binaryPath start= delayed-auto obj= "NT SERVICE\DigiAhanCdrDashboard" DisplayName= "DigiAhan CDR Dashboard" | Out-Null
+    } else {
+        & sc.exe config $serviceName binPath= $binaryPath start= delayed-auto obj= "NT SERVICE\DigiAhanCdrDashboard" | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Windows service configuration failed." }
+    & sc.exe config $serviceName depend= MSSQLSERVER | Out-Null
+    & sc.exe description $serviceName "DigiAhan dashboard with automatic startup and no interactive login" | Out-Null
+    & sc.exe failure $serviceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
+    & sc.exe failureflag $serviceName 1 | Out-Null
+    Grant-DashboardServiceSqlAccessV441 -ExpectedSourceRoot $ExpectedSourceRoot
+    $legacyTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($null -ne $legacyTask) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop }
+    Start-Service -Name $serviceName -ErrorAction Stop
+}
+
+function Install-AccountingInteractiveTaskV444 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedRepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedSourceRoot
+    )
+
+    $wrapper = Join-Path $ExpectedRepositoryRoot "tools\accounting-bridge-interactive-task.ps1"
+    if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
+        throw "Interactive accounting bridge wrapper was not found: $wrapper"
+    }
+
+    $exchangeDirectory = Join-Path $ExpectedRepositoryRoot "runtime\accounting-bridge"
+    New-Item -ItemType Directory -Path $exchangeDirectory -Force | Out-Null
+
+    $configPath = Join-Path $ExpectedSourceRoot "appsettings.DataGathering.local.json"
+    if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+        $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     else {
-        & sc.exe config $serviceName "binPath= $serviceCommand" | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Failed to update the dashboard Windows service." }
+        $config = [pscustomobject]@{}
     }
+    if ($null -eq $config.PSObject.Properties["DataGathering"]) {
+        $config | Add-Member -NotePropertyName DataGathering -NotePropertyValue ([pscustomobject]@{})
+    }
+    foreach ($entry in @{
+        AccountingBridgeTaskName = $accountingTaskName
+        AccountingBridgeTaskTimeoutSeconds = 600
+    }.GetEnumerator()) {
+        $property = $config.DataGathering.PSObject.Properties[$entry.Key]
+        if ($null -eq $property) {
+            $config.DataGathering | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value
+        }
+        else {
+            $property.Value = $entry.Value
+        }
+    }
+    $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $configPath -Encoding UTF8
 
-    Set-Service -Name $serviceName -StartupType Automatic
-    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to configure service recovery." }
-    & sc.exe failureflag $serviceName 1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to enable service recovery for non-crash failures." }
+    $userId = "$env:USERDOMAIN\$env:USERNAME"
+    $arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$wrapper`" -ExchangeDirectory `"$exchangeDirectory`""
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
+    $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $accountingTaskName -Action $action -Principal $principal `
+        -Settings $settings -Description "Runs accounting SQL sync in the signed-in user's network session." -Force | Out-Null
 
-    Start-Service -Name $serviceName -ErrorAction Stop
+    $serviceAccount = "NT SERVICE\$serviceName"
+    & icacls.exe $exchangeDirectory /grant "${serviceAccount}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not grant the dashboard service access to the accounting exchange directory." }
+
+    $serviceSid = ([Security.Principal.NTAccount]$serviceAccount).Translate(
+        [Security.Principal.SecurityIdentifier]).Value
+    $scheduler = New-Object -ComObject "Schedule.Service"
+    $scheduler.Connect()
+    $task = $scheduler.GetFolder("\").GetTask($accountingTaskName)
+    $dacl = $task.GetSecurityDescriptor(4)
+    if ($dacl -notmatch [regex]::Escape($serviceSid)) {
+        $task.SetSecurityDescriptor($dacl + "(A;;GRGX;;;$serviceSid)",0)
+    }
 }
 
 $relativeFiles = @(
@@ -79,6 +198,8 @@ $relativeFiles = @(
     "Source\DigiAhan.CDR.Receiver.csproj",
     "Source\appsettings.example.json",
     "Source\appsettings.DataGathering.example.json",
+    "Source\appsettings.Accounting.example.json",
+    "Source\appsettings.Didar.example.json",
     "Source\Models\DashboardModels.cs",
     "Source\Models\AiAnalysisApiModels.cs",
     "Source\Models\AiAnalysisModels.cs",
@@ -88,6 +209,7 @@ $relativeFiles = @(
     "Source\Models\CallIntelligenceModels.cs",
     "Source\Models\CustomerMappingModels.cs",
     "Source\Models\SellerWorkspaceModels.cs",
+    "Source\Models\SalesDashboardModels.cs",
     "Source\Models\SystemOperationsModels.cs",
     "Source\Services\AccountingSyncService.cs",
     "Source\Services\AiAnalysisRepository.cs",
@@ -97,22 +219,33 @@ $relativeFiles = @(
     "Source\Services\DailyRecordingIngestionWorker.cs",
     "Source\Services\DashboardRepository.cs",
     "Source\Services\CustomerIntelligenceRepository.cs",
+    "Source\Services\CustomerMappingService.cs",
     "Source\Services\CustomerIdentityReconcileService.cs",
     "Source\Services\DataGatheringCoordinator.cs",
+    "Source\Services\DatabaseMaintenanceService.cs",
     "Source\Services\DeliveryVoucherParser.cs",
     "Source\Services\IntegrationSchedulerService.cs",
+    "Source\Services\IntegrationSchedulerRepository.cs",
+    "Source\Services\IntegrationSchedulerWorker.cs",
     "Source\Services\InvoiceNotificationRepository.cs",
     "Source\Services\FasterWhisperTranscriber.cs",
     "Source\Services\IssabelRecordingPathResolver.cs",
     "Source\Services\IssabelSftpRecordingClient.cs",
     "Source\Services\LegacyAccountingBridgeRunner.cs",
+    "Source\Services\LegacyAgentBridgeService.cs",
+    "Source\Services\MappingValueNormalizer.cs",
     "Source\Services\AgentEventStore.cs",
+    "Source\Services\AgentCallStateStore.cs",
     "Source\Services\PublicTokenService.cs",
     "Source\Services\RecordingAssetRepository.cs",
     "Source\Services\RecordingAudioValidator.cs",
     "Source\Services\SellerWorkspaceAccessService.cs",
     "Source\Services\SellerWorkspaceRepository.cs",
+    "Source\Services\SalesDashboardRepository.cs",
     "Source\Services\SystemHealthService.cs",
+    "Source\Services\DidarApiSyncService.cs",
+    "Source\Services\DidarPhoneRebuildService.cs",
+    "Source\Services\ExcelMappingReader.cs",
     "Source\Services\TehranClock.cs",
     "Source\Sql\AccountingSchema.sql",
     "Source\Sql\DashboardExtensions.sql",
@@ -150,16 +283,45 @@ $relativeFiles = @(
     "Source\wwwroot\order\app.js",
     "Source\wwwroot\order\index.html",
     "Source\wwwroot\order\style.css",
+    "Source\wwwroot\seller-activity\app.js",
+    "Source\wwwroot\seller-activity\index.html",
+    "Source\wwwroot\seller-activity\style.css",
     "Source\wwwroot\seller-v2\app.js",
     "Source\wwwroot\seller-v2\balance.css",
+    "Source\wwwroot\seller-v2\enhancements.css",
     "Source\wwwroot\seller-v2\index.html",
     "Source\wwwroot\seller-v2\style.css",
     "Source\wwwroot\seller-admin\app.js",
     "Source\wwwroot\seller-admin\index.html",
     "Source\wwwroot\seller-admin\style.css",
+    "Source\wwwroot\seller-mapping\app.js",
+    "Source\wwwroot\seller-mapping\index.html",
+    "Source\wwwroot\seller-mapping\style.css",
     "Source\wwwroot\version.js",
     "tools\accounting-bridge-v4.3.10.ps1",
+    "tools\accounting-bridge-interactive-task.ps1",
+    "tools\diagnose-didar-phone.ps1",
+    "issabel\digiahan_call_intelligence.py",
     "tools\ai\transcribe_sample.py"
+)
+
+# Local configuration files contain site-specific credentials and settings. They are
+# deliberately excluded from the release payload, but every update must still back
+# them up. When an operator runs the installer from the maintained repository and an
+# active Didar/Accounting file is missing, recover it from that repository source.
+$protectedLocalConfigs = @(
+    "Source\appsettings.Voip.local.json",
+    "Source\appsettings.RecordingIngestion.local.json",
+    "Source\appsettings.SellerWorkspace.local.json",
+    "Source\appsettings.JourneyKernel.local.json",
+    "Source\appsettings.Dashboard.local.json",
+    "Source\appsettings.Didar.local.json",
+    "Source\appsettings.Accounting.local.json",
+    "Source\appsettings.DataGathering.local.json"
+)
+$recoverableRepositoryConfigs = @(
+    "Source\appsettings.Didar.local.json",
+    "Source\appsettings.Accounting.local.json"
 )
 
 if ([version]$version -ge [version]"4.4.0") {
@@ -192,7 +354,9 @@ if ($ValidatePackageOnly) {
     foreach ($script in $scripts) {
         $tokens = $null
         $errors = $null
-        [Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+        $scriptText = Get-Content -LiteralPath $script.FullName -Raw -Encoding UTF8
+        [Management.Automation.Language.Parser]::ParseInput(
+            $scriptText,$script.FullName,[ref]$tokens,[ref]$errors) | Out-Null
         if ($errors.Count -gt 0) { throw "PowerShell syntax error in $($script.FullName): $($errors[0].Message)" }
     }
     $program = Get-Content -LiteralPath (Join-Path $payloadRoot "Source\Program.cs") -Raw -Encoding UTF8
@@ -213,32 +377,6 @@ if ($null -ne $existingService) {
     if ($LASTEXITCODE -ne 0) { throw "Could not inspect Windows service $serviceName; no files were changed." }
     if ($serviceConfig.IndexOf($sourceRoot,[StringComparison]::OrdinalIgnoreCase) -lt 0) {
         throw "Windows service $serviceName points outside $sourceRoot. Correct its path before installing; no files were changed."
-    }
-    if ($existingService.Status -ne [ServiceProcess.ServiceControllerStatus]::Running) {
-        throw "Windows service $serviceName must be running and healthy before installation; no files were changed."
-    }
-    try {
-        $preflightVersion = (Invoke-RestMethod "http://localhost:5088/api/version" -TimeoutSec 5).version
-        $preflightHealth = (Invoke-RestMethod "http://localhost:5088/health" -TimeoutSec 5).status
-    }
-    catch {
-        throw "Windows service preflight failed. Fix its SQL identity/health before installing; no files were changed. $($_.Exception.Message)"
-    }
-    if ($preflightHealth -ne "healthy") {
-        throw "Windows service is not healthy before installation (version $preflightVersion); no files were changed."
-    }
-}
-else {
-    $runtimeConfigPath = Join-Path $sourceRoot "appsettings.json"
-    if (Test-Path -LiteralPath $runtimeConfigPath -PathType Leaf) {
-        $runtimeConfig = Get-Content -LiteralPath $runtimeConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        $runtimeConnection = [string]$runtimeConfig.ConnectionStrings.DigiAhanCdr
-        if (-not [string]::IsNullOrWhiteSpace($runtimeConnection)) {
-            $connectionBuilder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($runtimeConnection)
-            if ($connectionBuilder.IntegratedSecurity) {
-                throw "No $serviceName service exists and DigiAhanCdr uses Windows authentication. Configure a SQL-authorized service identity before installation; no files were changed."
-            }
-        }
     }
 }
 
@@ -293,6 +431,14 @@ try {
             Copy-Item -LiteralPath $target -Destination $backup -Force
         }
     }
+    foreach ($relative in $protectedLocalConfigs) {
+        $target = Join-Path $RepositoryRoot $relative
+        if (Test-Path -LiteralPath $target -PathType Leaf) {
+            $backup = Join-Path $backupRoot $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path $backup) | Out-Null
+            Copy-Item -LiteralPath $target -Destination $backup -Force
+        }
+    }
 
     $phase = "INSTALL"
     Write-Host "[4/8] Installing v$version files..." -ForegroundColor Cyan
@@ -302,6 +448,16 @@ try {
         $target = Join-Path $RepositoryRoot $relative
         New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
         Copy-Item -LiteralPath $source -Destination $target -Force
+    }
+    foreach ($relative in $recoverableRepositoryConfigs) {
+        $target = Join-Path $RepositoryRoot $relative
+        $repositorySource = Join-Path $PSScriptRoot $relative
+        if ((-not (Test-Path -LiteralPath $target -PathType Leaf)) -and
+            (Test-Path -LiteralPath $repositorySource -PathType Leaf)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+            Copy-Item -LiteralPath $repositorySource -Destination $target -Force
+            Write-Host "Recovered missing local configuration: $relative" -ForegroundColor Green
+        }
     }
     $filesInstalled = $true
 
@@ -420,7 +576,8 @@ try {
 
     $phase = "START"
     Write-Host "[6/8] Installing and starting the persistent dashboard service..." -ForegroundColor Cyan
-    Install-AndStartDashboardService -ExpectedSourceRoot $sourceRoot
+    Install-AndStartDashboardServiceV441 -ExpectedSourceRoot $sourceRoot
+    Install-AccountingInteractiveTaskV444 -ExpectedRepositoryRoot $RepositoryRoot -ExpectedSourceRoot $sourceRoot
 
     $healthy = $false
     foreach ($attempt in 1..60) {
@@ -566,7 +723,7 @@ catch {
             }
             finally { Pop-Location }
 
-            Install-AndStartDashboardService -ExpectedSourceRoot $sourceRoot
+            Install-AndStartDashboardServiceV441 -ExpectedSourceRoot $sourceRoot
             $rollbackHealthy = $false
             foreach ($rollbackAttempt in 1..60) {
                 Start-Sleep -Seconds 1

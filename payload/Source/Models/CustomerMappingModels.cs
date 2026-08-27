@@ -32,6 +32,25 @@ public sealed record UnmappedAccountingCode(
     string? ErrorMessage,
     DateTime UpdatedAtUtc);
 
+public sealed record PendingInvoiceMapping(
+    string AccountingCode,
+    string? CustomerName,
+    string? LastFactorDate,
+    decimal? LastFactorNumber,
+    decimal TotalSales,
+    int InvoiceCount,
+    DateTime LastImportedAtUtc);
+
+public sealed record ManualAccountingMappingRequest(
+    string AccountingCode,
+    string Phone);
+
+public sealed record ManualAccountingMappingResult(
+    string AccountingCode,
+    string NormalizedPhone,
+    long IdentityId,
+    string Status);
+
 public sealed record DataGatheringRunResult(
     Guid RunId,
     DateTime StartedAtUtc,

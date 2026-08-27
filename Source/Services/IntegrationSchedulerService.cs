@@ -7,6 +7,7 @@ public sealed class IntegrationSchedulerService
     private readonly IntegrationSchedulerRepository _repository;
     private readonly LegacyAccountingBridgeRunner _accounting;
     private readonly CustomerIdentityReconcileService _identities;
+    private readonly DidarApiSyncService _didarApi;
     private readonly CustomerMappingService _mappings;
     private readonly SystemHealthService _health;
     private readonly DatabaseMaintenanceService _maintenance;
@@ -19,6 +20,7 @@ public sealed class IntegrationSchedulerService
         IntegrationSchedulerRepository repository,
         LegacyAccountingBridgeRunner accounting,
         CustomerIdentityReconcileService identities,
+        DidarApiSyncService didarApi,
         CustomerMappingService mappings,
         SystemHealthService health,
         DatabaseMaintenanceService maintenance,
@@ -30,6 +32,7 @@ public sealed class IntegrationSchedulerService
         _repository = repository;
         _accounting = accounting;
         _identities = identities;
+        _didarApi = didarApi;
         _mappings = mappings;
         _health = health;
         _maintenance = maintenance;
@@ -78,13 +81,15 @@ public sealed class IntegrationSchedulerService
                 var days = Math.Clamp(_configuration.GetValue("DataGathering:IncrementalAccountingDays", 7), 1, 31);
                 var result = await _accounting.RunAsync(days, ct);
                 if (result.Status != "SUCCESS") throw new InvalidOperationException(result.Error + Environment.NewLine + result.Output);
+                var mapping = await _mappings.ReconcileAsync(ct);
                 var notifications = await _invoiceNotifications.DiscoverAsync(ct);
-                return $"Incremental rolling window: {days} days. Notifications: scanned={notifications.Scanned}, ready={notifications.Ready}, needsIdentity={notifications.NeedsIdentity}, needsPhone={notifications.NeedsPhone}.";
+                return $"Incremental rolling window: {days} days. Mapping: linked={mapping.LinkedCodes}, pending={mapping.UnmappedCodes + mapping.ConflictCodes}. Notifications: scanned={notifications.Scanned}, ready={notifications.Ready}, needsIdentity={notifications.NeedsIdentity}, needsPhone={notifications.NeedsPhone}.";
             }
             case "DIDAR_IDENTITY":
             {
+                var sync = await _didarApi.SyncAsync(ct);
                 var result = await _identities.ReconcileAsync(ct);
-                return $"Contacts={result.TotalActiveDidar}; Phones={result.DidarPhones}; Linked={result.LinkedDidar}.";
+                return $"API received={sync.Received}, inserted={sync.Inserted}, updated={sync.Updated}; Contacts={result.TotalActiveDidar}; Phones={result.DidarPhones}; Linked={result.LinkedDidar}.";
             }
             case "ISSABEL_MONITOR":
                 await _health.ProbeIssabelAsync(ct);

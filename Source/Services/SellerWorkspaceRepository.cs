@@ -46,15 +46,71 @@ public sealed class SellerWorkspaceRepository
         finally { SchemaGate.Release(); }
     }
 
-    public async Task<SellerTodayStats> GetStatsAsync(SellerIdentity seller, CancellationToken ct)
+    public Task<SellerTodayStats> GetStatsAsync(SellerIdentity seller, CancellationToken ct)
+        => GetStatsForRangeAsync(seller, TehranClock.StartOfTodayUtc(), TehranClock.StartOfTodayUtc().AddDays(1), ct);
+
+    public Task<SellerTodayStats> GetYesterdayStatsAsync(SellerIdentity seller, CancellationToken ct)
+    {
+        var end = TehranClock.StartOfTodayUtc();
+        return GetStatsForRangeAsync(seller, end.AddDays(-1), end, ct);
+    }
+
+    private async Task<SellerTodayStats> GetStatsForRangeAsync(
+        SellerIdentity seller, DateTime start, DateTime end, CancellationToken ct)
     {
         await EnsureSchemaAsync(ct);
-        var start = TehranClock.StartOfTodayUtc();
-        var end = start.AddDays(1);
         var extensions = BuildExtensions(seller.Extensions);
         var sql = $"""
+        ;WITH RawLegs AS
+        (
+          SELECT
+            CallKey=COALESCE(NULLIF(LinkedId,N''),NULLIF(UniqueId,N''),CONVERT(nvarchar(30),RawCDRId)),
+            IsInbound=CASE WHEN NULLIF(Did,N'') IS NOT NULL OR Dcontext LIKE N'%from-trunk%' THEN 1 ELSE 0 END,
+            IsOutbound=CASE WHEN Dcontext LIKE N'%from-internal%' OR Dcontext LIKE N'%outbound%' THEN 1 ELSE 0 END,
+            IsAnswered=CASE WHEN Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0 THEN 1 ELSE 0 END,
+            AnsweredExtension=CASE
+              WHEN (Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0) AND Dst LIKE N'[0-9][0-9][0-9]' THEN Dst
+              WHEN (Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0) AND Src LIKE N'[0-9][0-9][0-9]' THEN Src END,
+            OutboundExtension=CASE
+              WHEN (Dcontext LIKE N'%from-internal%' OR Dcontext LIKE N'%outbound%')
+               AND Src LIKE N'[0-9][0-9][0-9]' THEN Src END,
+            CustomerPhone=CASE WHEN LEN(Src)>4 THEN Src WHEN LEN(Dst)>4 THEN Dst END,
+            EventAtUtc=MIN(Calldate) OVER(PARTITION BY COALESCE(NULLIF(LinkedId,N''),NULLIF(UniqueId,N''),CONVERT(nvarchar(30),RawCDRId)))
+          FROM dbo.RawCDR
+          WHERE ReceivedAtUtc>=@start AND ReceivedAtUtc<@end
+        ),
+        Calls AS
+        (
+          SELECT CallKey,IsInbound=MAX(IsInbound),IsOutbound=MAX(IsOutbound),
+            IsAnswered=MAX(IsAnswered),AnsweredExtension=MAX(AnsweredExtension),
+            OutboundExtension=MAX(OutboundExtension),CustomerPhone=MAX(CustomerPhone),
+            EventAtUtc=MIN(EventAtUtc)
+          FROM RawLegs GROUP BY CallKey
+        ),
+        Mine AS
+        (
+          SELECT *,AttributedExtension=CASE WHEN IsInbound=1 THEN AnsweredExtension ELSE OutboundExtension END
+          FROM Calls
+          WHERE IsAnswered=1 AND
+            ((IsInbound=1 AND AnsweredExtension IN ({extensions.Sql}))
+             OR (IsOutbound=1 AND OutboundExtension IN ({extensions.Sql})))
+        ),
+        Completed AS
+        (
+          SELECT m.CallKey
+          FROM Mine m
+          WHERE EXISTS
+          (
+            SELECT 1 FROM dbo.SellerInteractions i
+            WHERE i.SellerKey=@seller
+              AND ((NULLIF(m.CallKey,N'') IS NOT NULL AND i.CallLinkedId=m.CallKey)
+                OR (dbo.NormalizeIranPhone(i.CustomerPhone)=dbo.NormalizeIranPhone(m.CustomerPhone)
+                  AND i.OccurredAtUtc BETWEEN DATEADD(minute,-15,m.EventAtUtc) AND DATEADD(hour,4,m.EventAtUtc)))
+          )
+        )
         SELECT
-          (SELECT COUNT(*) FROM dbo.AgentIncomingEvents WHERE Extension IN ({extensions.Sql}) AND CreatedAtUtc>=@start AND CreatedAtUtc<@end),
+          (SELECT COUNT(*) FROM Mine),
+          (SELECT COUNT(*) FROM Completed),
           (SELECT COUNT(*) FROM dbo.SellerInteractions WHERE SellerKey=@seller AND OccurredAtUtc>=@start AND OccurredAtUtc<@end),
           (SELECT COUNT(*) FROM dbo.SellerInteractionActions a JOIN dbo.SellerInteractions i ON i.Id=a.InteractionId WHERE i.SellerKey=@seller AND i.OccurredAtUtc>=@start AND i.OccurredAtUtc<@end AND a.ActionCode=N'PRICE_QUOTED'),
           (SELECT COUNT(*) FROM dbo.SellerInteractions WHERE SellerKey=@seller AND OccurredAtUtc>=@start AND OccurredAtUtc<@end AND Outcome=N'ORDER'),
@@ -72,11 +128,51 @@ public sealed class SellerWorkspaceRepository
         await using var reader = await command.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
         var calls = reader.GetInt32(0);
-        var results = reader.GetInt32(1);
-        var missing = Math.Max(0, calls - results);
-        var quality = calls == 0 ? 100 : Math.Clamp((int)Math.Round(results * 100d / calls), 0, 100);
+        var completed = reader.GetInt32(1);
+        var missing = Math.Max(0, calls - completed);
+        var quality = calls == 0 ? 100 : Math.Clamp((int)Math.Round(completed * 100d / calls), 0, 100);
         return new SellerTodayStats(calls, reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4),
-            missing, reader.GetInt32(5), reader.GetInt32(6), quality);
+            reader.GetInt32(5), missing, reader.GetInt32(6), reader.GetInt32(7), quality);
+    }
+
+    public async Task<SellerPerformanceSummary> GetPerformanceAsync(SellerIdentity seller, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT MIN(OccurredAtUtc),
+       COUNT(*),
+       COALESCE(SUM(CASE WHEN Outcome=N'ORDER' THEN 1 ELSE 0 END),0),
+       COALESCE(SUM(CASE WHEN Outcome=N'LOST' THEN 1 ELSE 0 END),0),
+       COUNT(a.InteractionId)
+FROM dbo.SellerInteractions i
+LEFT JOIN (SELECT DISTINCT InteractionId FROM dbo.SellerInteractionActions WHERE ActionCode=N'PRICE_QUOTED') a ON a.InteractionId=i.Id
+WHERE SellerKey=@seller;
+SELECT CONVERT(date, DATEADD(MINUTE,210,OccurredAtUtc)) Day,
+       COUNT(*) Interactions,
+       SUM(CASE WHEN Outcome=N'ORDER' THEN 1 ELSE 0 END) Orders,
+       SUM(CASE WHEN Outcome=N'LOST' THEN 1 ELSE 0 END) Lost,
+       COUNT(a.InteractionId) Priced
+FROM dbo.SellerInteractions i
+LEFT JOIN (SELECT DISTINCT InteractionId FROM dbo.SellerInteractionActions WHERE ActionCode=N'PRICE_QUOTED') a ON a.InteractionId=i.Id
+WHERE SellerKey=@seller
+GROUP BY CONVERT(date, DATEADD(MINUTE,210,OccurredAtUtc))
+ORDER BY Day DESC;";
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        using var command = new SqlCommand(sql, connection) { CommandTimeout = 30 };
+        command.Parameters.Add("@seller", SqlDbType.NVarChar, 80).Value = seller.Key;
+        using var reader = await command.ExecuteReaderAsync(ct);
+        DateTime? first = null; var totalInteractions = 0; var totalOrders = 0; var totalLost = 0; var totalPriced = 0;
+        if (await reader.ReadAsync(ct))
+        {
+            first = reader.IsDBNull(0) ? null : reader.GetDateTime(0);
+            totalInteractions = reader.GetInt32(1); totalOrders = reader.GetInt32(2);
+            totalLost = reader.GetInt32(3); totalPriced = reader.GetInt32(4);
+        }
+        await reader.NextResultAsync(ct);
+        var days = new List<SellerPerformanceDay>();
+        while (await reader.ReadAsync(ct))
+            days.Add(new SellerPerformanceDay(reader.GetDateTime(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4)));
+        return new SellerPerformanceSummary(first, totalInteractions, totalOrders, totalLost, totalPriced, days);
     }
 
     public async Task<IReadOnlyList<SellerFollowUpRow>> GetFollowUpsAsync(SellerIdentity seller, int take, CancellationToken ct)
@@ -344,36 +440,62 @@ public sealed class SellerWorkspaceRepository
         var start = TehranClock.StartOfTodayUtc();
         var extensions = BuildExtensions(seller.Extensions);
         var sql = $"""
-        ;WITH Incoming AS
+        ;WITH RawLegs AS
         (
-          SELECT e.*,
-            rn=ROW_NUMBER() OVER(PARTITION BY COALESCE(NULLIF(e.LinkedId,N''),e.CallerNumber)
-                                 ORDER BY e.CreatedAtUtc DESC,e.Id DESC)
-          FROM dbo.AgentIncomingEvents e
-          WHERE e.Extension IN ({extensions.Sql}) AND e.CreatedAtUtc>=@start
+          SELECT
+            CallKey=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId)),
+            r.RawCDRId,r.Src,r.Dst,r.Calldate,
+            IsInbound=CASE WHEN NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%' THEN 1 ELSE 0 END,
+            IsAnswered=CASE WHEN r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0 THEN 1 ELSE 0 END,
+            AnsweredExtension=CASE
+              WHEN (r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0) AND r.Dst LIKE N'[0-9][0-9][0-9]' THEN r.Dst
+              WHEN (r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0) AND r.Src LIKE N'[0-9][0-9][0-9]' THEN r.Src END
+          FROM dbo.RawCDR r
+          WHERE r.ReceivedAtUtc>=@start AND r.ReceivedAtUtc<SYSUTCDATETIME()
+        ),
+        Calls AS
+        (
+          SELECT CallKey,Id=MAX(RawCDRId),EventAtUtc=MIN(Calldate),
+            CustomerPhone=MAX(CASE WHEN LEN(Src)>4 THEN Src WHEN LEN(Dst)>4 THEN Dst END),
+            IsInbound=MAX(IsInbound),IsAnswered=MAX(IsAnswered),
+            AnsweredExtension=MAX(AnsweredExtension)
+          FROM RawLegs GROUP BY CallKey
+        ),
+        AnsweredBySeller AS
+        (
+          SELECT * FROM Calls
+          WHERE IsInbound=1 AND IsAnswered=1 AND AnsweredExtension IN ({extensions.Sql})
         )
-        SELECT TOP(@take) e.Id,e.CallerNumber,
-          COALESCE(NULLIF(e.CustomerName,N''),NULLIF(e.CompanyName,N''),e.CallerNumber),
-          e.EventTimeUtc,e.LinkedId
-        FROM Incoming e
-        WHERE e.rn=1
-          AND NOT EXISTS
+        SELECT TOP(@take) c.Id,c.CustomerPhone,
+          COALESCE(NULLIF(ev.CustomerName,N''),NULLIF(ev.CompanyName,N''),c.CustomerPhone),
+          c.EventAtUtc,c.CallKey
+        FROM AnsweredBySeller c
+        OUTER APPLY
+        (
+          SELECT TOP(1) e.CustomerName,e.CompanyName
+          FROM dbo.AgentIncomingEvents e
+          WHERE (e.LinkedId=c.CallKey
+              OR (dbo.NormalizeIranPhone(e.CallerNumber)=dbo.NormalizeIranPhone(c.CustomerPhone)
+                  AND e.CreatedAtUtc BETWEEN DATEADD(minute,-15,c.EventAtUtc) AND DATEADD(hour,1,c.EventAtUtc)))
+          ORDER BY CASE WHEN e.Extension=c.AnsweredExtension THEN 0 ELSE 1 END,e.Id DESC
+        ) ev
+        WHERE NOT EXISTS
           (
             SELECT 1 FROM dbo.SellerInteractions i
             WHERE i.SellerKey=@seller
-              AND ((NULLIF(e.LinkedId,N'') IS NOT NULL AND i.CallLinkedId=e.LinkedId)
-                   OR (dbo.NormalizeIranPhone(i.CustomerPhone)=dbo.NormalizeIranPhone(e.CallerNumber)
-                       AND i.OccurredAtUtc BETWEEN DATEADD(minute,-15,e.CreatedAtUtc) AND DATEADD(hour,4,e.CreatedAtUtc)))
+              AND ((NULLIF(c.CallKey,N'') IS NOT NULL AND i.CallLinkedId=c.CallKey)
+                   OR (dbo.NormalizeIranPhone(i.CustomerPhone)=dbo.NormalizeIranPhone(c.CustomerPhone)
+                       AND i.OccurredAtUtc BETWEEN DATEADD(minute,-15,c.EventAtUtc) AND DATEADD(hour,4,c.EventAtUtc)))
           )
           AND NOT EXISTS
           (
             SELECT 1 FROM dbo.AgentCallOutcomes o
-            WHERE o.Extension=e.Extension
-              AND ((NULLIF(e.LinkedId,N'') IS NOT NULL AND o.LinkedId=e.LinkedId)
-                   OR (dbo.NormalizeIranPhone(o.CallerNumber)=dbo.NormalizeIranPhone(e.CallerNumber)
-                       AND o.CreatedAtUtc BETWEEN DATEADD(minute,-15,e.CreatedAtUtc) AND DATEADD(hour,4,e.CreatedAtUtc)))
+            WHERE o.Extension=c.AnsweredExtension
+              AND ((NULLIF(c.CallKey,N'') IS NOT NULL AND o.LinkedId=c.CallKey)
+                   OR (dbo.NormalizeIranPhone(o.CallerNumber)=dbo.NormalizeIranPhone(c.CustomerPhone)
+                       AND o.CreatedAtUtc BETWEEN DATEADD(minute,-15,c.EventAtUtc) AND DATEADD(hour,4,c.EventAtUtc)))
           )
-        ORDER BY e.CreatedAtUtc DESC;
+        ORDER BY c.EventAtUtc DESC;
         """;
         var rows = new List<SellerMissingResultRow>();
         await using var connection = await OpenAsync(ct);
@@ -387,6 +509,73 @@ public sealed class SellerWorkspaceRepository
             rows.Add(new SellerMissingResultRow(reader.GetInt64(0), reader.GetString(1), reader.GetString(2),
                 TehranClock.AsUtc(reader.GetDateTime(3)), GetString(reader, 4)));
         return rows;
+    }
+
+    public async Task<SellerCallLifecycle?> GetCallLifecycleAsync(
+        string? linkedId, string callerNumber, DateTime eventAtUtc, CancellationToken ct)
+    {
+        await EnsureSchemaAsync(ct);
+        const string sql = """
+        ;WITH Matching AS
+        (
+          SELECT *
+          FROM dbo.RawCDR
+          WHERE
+            (NULLIF(@linkedId,N'') IS NOT NULL
+             AND (LinkedId=@linkedId OR UniqueId=@linkedId))
+            OR
+            (NULLIF(@linkedId,N'') IS NULL
+             AND (dbo.NormalizeIranPhone(Src)=dbo.NormalizeIranPhone(@caller)
+               OR dbo.NormalizeIranPhone(Dst)=dbo.NormalizeIranPhone(@caller))
+             AND Calldate BETWEEN DATEADD(minute,-2,@eventAt) AND DATEADD(hour,4,@eventAt))
+        )
+        SELECT
+          AnsweredExtension=MAX(CASE
+            WHEN (Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0)
+             AND Dst LIKE N'[0-9][0-9][0-9]' THEN Dst
+            WHEN (Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0)
+             AND Src LIKE N'[0-9][0-9][0-9]' THEN Src END),
+          AnsweredAtUtc=MIN(CASE WHEN Disposition=N'ANSWERED' OR ISNULL(Billsec,0)>0
+            THEN DATEADD(second,CASE WHEN ISNULL(Duration,0)>ISNULL(Billsec,0)
+              THEN Duration-Billsec ELSE 0 END,Calldate) END),
+          EndedAtUtc=MAX(DATEADD(second,ISNULL(Duration,0),Calldate)),
+          TalkSeconds=MAX(ISNULL(Billsec,0)),
+          [RowCount]=COUNT(*)
+        FROM Matching;
+        """;
+        await using var connection = await OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 10 };
+        command.Parameters.Add("@linkedId", SqlDbType.NVarChar, 100).Value =
+            string.IsNullOrWhiteSpace(linkedId) ? DBNull.Value : linkedId.Trim();
+        command.Parameters.Add("@caller", SqlDbType.NVarChar, 32).Value = callerNumber.Trim();
+        command.Parameters.Add("@eventAt", SqlDbType.DateTime2).Value = eventAtUtc;
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct) || reader.GetInt32(4) == 0) return null;
+
+        var answeredExtension = GetString(reader, 0);
+        DateTime? answeredAt = reader.IsDBNull(1) ? null : TehranClock.AsUtc(reader.GetDateTime(1));
+        DateTime? endedAt = reader.IsDBNull(2) ? null : TehranClock.AsUtc(reader.GetDateTime(2));
+        var talkSeconds = reader.GetInt32(3);
+        return new SellerCallLifecycle(
+            endedAt.HasValue ? "ENDED" : answeredExtension is null ? "RINGING" : "ANSWERED",
+            answeredExtension, answeredAt, endedAt, talkSeconds);
+    }
+
+    public async Task<string?> GetSellerDisplayNameAsync(string? extension, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(extension)) return null;
+        await EnsureSchemaAsync(ct);
+        const string sql = """
+        SELECT TOP(1) u.DisplayName
+        FROM dbo.SellerUserExtensions e
+        JOIN dbo.SellerUsers u ON u.Id=e.SellerUserId
+        WHERE e.Extension=@extension AND u.IsActive=1
+        ORDER BY u.Id;
+        """;
+        await using var connection = await OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 5 };
+        command.Parameters.Add("@extension", SqlDbType.NVarChar, 10).Value = extension.Trim();
+        return Convert.ToString(await command.ExecuteScalarAsync(ct));
     }
 
     public async Task<IReadOnlyList<SellerTimelineRow>> GetTimelineAsync(
@@ -416,6 +605,12 @@ public sealed class SellerWorkspaceRepository
           UNION SELECT N'0098'+SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
           UNION SELECT N'+98'+SUBSTRING(NormalizedPhone,2,32) FROM CustomerPhones WHERE NormalizedPhone LIKE N'0%'
         ),
+        TargetCustomer AS
+        (
+          SELECT TOP(1) CustomerName=COALESCE(NULLIF(i.DisplayName,N''),NULLIF(i.CompanyName,N''),@phone)
+          FROM dbo.CustomerIdentities i
+          WHERE i.IdentityId=(SELECT TOP(1) IdentityId FROM TargetIdentity)
+        ),
         MatchingCalls AS
         (
           SELECT r.* FROM dbo.RawCDR r
@@ -423,6 +618,18 @@ public sealed class SellerWorkspaceRepository
           UNION
           SELECT r.* FROM dbo.RawCDR r
           INNER JOIN CustomerPhoneVariants p ON p.Phone=r.Dst
+        ),
+        CallEvents AS
+        (
+          SELECT Id=-MIN(r.RawCDRId),EventAtUtc=MIN(r.ReceivedAtUtc),
+            Direction=CASE WHEN MAX(CASE WHEN r.Src IN ({extensions.Sql}) THEN 1 ELSE 0 END)=1 THEN N'OUT' ELSE N'IN' END,
+            Answered=MAX(CASE WHEN r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0 THEN 1 ELSE 0 END),
+            AnsweredExtension=MAX(CASE
+              WHEN (r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0) AND r.Dst LIKE N'[0-9][0-9][0-9]' THEN r.Dst
+              WHEN (r.Disposition=N'ANSWERED' OR ISNULL(r.Billsec,0)>0) AND r.Src LIKE N'[0-9][0-9][0-9]' THEN r.Src END),
+            IsMine=CAST(MAX(CASE WHEN r.Src IN ({extensions.Sql}) OR r.Dst IN ({extensions.Sql}) THEN 1 ELSE 0 END) AS bit)
+          FROM MatchingCalls r
+          GROUP BY COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
         ),
         Events AS
         (
@@ -436,24 +643,17 @@ public sealed class SellerWorkspaceRepository
           WHERE i.CustomerIdentityId=(SELECT TOP(1) IdentityId FROM TargetIdentity)
              OR dbo.NormalizeIranPhone(i.CustomerPhone) IN(SELECT NormalizedPhone FROM CustomerPhones)
           UNION ALL
-          SELECT -MIN(r.RawCDRId),N'CALL',MIN(r.ReceivedAtUtc),
-            CASE
-              WHEN MAX(CASE WHEN r.Src IN ({extensions.Sql}) THEN 1 ELSE 0 END)=1
-                THEN N'تماس خروجی از داخلی '+MAX(CASE WHEN r.Src IN ({extensions.Sql}) THEN r.Src END)
-              WHEN MAX(CASE WHEN r.Dst IN ({extensions.Sql}) THEN 1 ELSE 0 END)=1
-                THEN N'تماس ورودی به داخلی '+MAX(CASE WHEN r.Dst IN ({extensions.Sql}) THEN r.Dst END)
-              ELSE N'سیستم تلفنی'
-            END,
-            CASE
-              WHEN MAX(CASE WHEN r.Src IN ({extensions.Sql}) THEN 1 ELSE 0 END)=1 THEN N'تماس خروجی'
-              ELSE N'تماس ورودی'
-            END,
-            N'وضعیت: '+COALESCE(MAX(NULLIF(r.Disposition,N'')),N'نامشخص')+
-              N' · مدت مکالمه: '+CONVERT(nvarchar(20),MAX(ISNULL(r.Billsec,0)))+N' ثانیه',
+          SELECT c.Id,N'CALL',c.EventAtUtc,
+            COALESCE(u.DisplayName,CASE WHEN c.AnsweredExtension IS NOT NULL THEN N'داخلی '+c.AnsweredExtension ELSE N'بدون پاسخ‌دهنده' END),
+            CASE WHEN c.Direction=N'OUT' THEN N'تماس خروجی با ' ELSE N'تماس ورودی از ' END+
+              COALESCE((SELECT TOP(1) CustomerName FROM TargetCustomer),@phone),
+            CASE WHEN c.Answered=1 THEN N'✓ پاسخ توسط '+COALESCE(u.DisplayName,N'داخلی '+c.AnsweredExtension,N'پاسخ‌دهنده ثبت‌نشده')
+              ELSE N'✕ بدون پاسخ؛ نیازمند بررسی' END,
             NULL,NULL,NULL,NULL,NULL,NULL,
-            CAST(MAX(CASE WHEN r.Src IN ({extensions.Sql}) OR r.Dst IN ({extensions.Sql}) THEN 1 ELSE 0 END) AS bit)
-          FROM MatchingCalls r
-          GROUP BY COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
+            c.IsMine
+          FROM CallEvents c
+          LEFT JOIN dbo.SellerUserExtensions ue ON ue.Extension=c.AnsweredExtension
+          LEFT JOIN dbo.SellerUsers u ON u.Id=ue.SellerUserId AND u.IsActive=1
           UNION ALL
           SELECT -1000000000-o.Id,N'LEGACY_OUTCOME',o.CreatedAtUtc,
             N'داخلی '+o.Extension,
