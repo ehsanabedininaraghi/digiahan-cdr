@@ -11,7 +11,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
-const string AppVersion = "4.4.4";
+const string AppVersion = "4.4.5";
 const string BuildDate = "2026-08-25";
 
 var builder = WebApplication.CreateBuilder(args);
