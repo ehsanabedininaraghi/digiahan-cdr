@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>مدیریت کاربران فروش | دیجی‌آهن</title>
+  <link rel="stylesheet" href="./style.css?v=4312">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span>D</span><div><b>دیجی‌آهن</b><small>مدیریت کاربران فروش</small></div></div>
+      <div class="top-actions">
+        <a href="/dashboard">بازگشت به داشبورد مدیریت</a>
+        <button id="newUser" class="primary">+ کاربر فروش جدید</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div><p>کنترل دسترسی میزکار Seller</p><h1>کاربران فروش</h1><span>هر فروشنده فقط تماس‌ها، مشتریان و پیگیری‌های داخلی‌های تعیین‌شده برای خودش را می‌بیند.</span></div>
+        <a class="seller-link" href="/seller-v2/" target="_blank" rel="noopener">بازکردن صفحه ورود فروشنده ↗</a>
+      </section>
+
+      <section class="metrics" aria-label="خلاصه کاربران">
+        <article><span>کل کاربران</span><b id="totalUsers">—</b></article>
+        <article class="green"><span>فعال</span><b id="activeUsers">—</b></article>
+        <article class="blue"><span>نشست فعال</span><b id="onlineUsers">—</b></article>
+        <article class="gray"><span>غیرفعال</span><b id="inactiveUsers">—</b></article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div><h2>فهرست دسترسی‌ها</h2><p>رمزها قابل مشاهده نیستند؛ فقط می‌توان رمز تازه تعیین کرد.</p></div>
+          <label class="search"><span>⌕</span><input id="search" type="search" placeholder="نام، نام کاربری یا داخلی…"></label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>فروشنده</th><th>نام کاربری</th><th>داخلی‌ها</th><th>گروه کالا</th><th>آخرین ورود</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+            <tbody id="userRows"><tr><td colspan="7" class="loading">در حال خواندن کاربران…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <div class="backdrop" data-close></div>
+    <form id="userForm" class="dialog">
+      <header><div><small id="formHint">کاربر جدید</small><h2 id="formTitle">ساخت کاربر فروش</h2></div><button type="button" class="close" data-close>×</button></header>
+      <input id="userId" type="hidden">
+      <div class="form-grid">
+        <label><span>نام و نام خانوادگی</span><input id="displayName" required maxlength="200" placeholder="مثلاً مجید پورمهدی"></label>
+        <label><span>نام کاربری</span><input id="username" required minlength="3" maxlength="80" dir="ltr" placeholder="majid"></label>
+        <label><span>شناسه سیستمی فروشنده</span><input id="sellerKey" required minlength="2" maxlength="80" dir="ltr" placeholder="seller-201"></label>
+        <label><span>داخلی‌ها</span><input id="extensions" required dir="ltr" placeholder="201, 202"><small>با ویرگول جدا کنید؛ اطلاعات فقط برای همین داخلی‌ها نمایش داده می‌شود.</small></label>
+        <label class="wide"><span>گروه‌های کالا</span><input id="productGroups" placeholder="میلگرد، تیرآهن، ورق"><small>اختیاری؛ با ویرگول جدا کنید.</small></label>
+        <label class="wide"><span id="passwordLabel">رمز اولیه</span><div class="password-field"><input id="password" type="text" minlength="8" dir="ltr" autocomplete="new-password" placeholder="حداقل ۸ کاراکتر"><button id="generatePassword" type="button">ساخت رمز</button></div><small id="passwordHelp">رمز پس از ذخیره قابل بازیابی نیست.</small></label>
+        <label class="switch-row wide"><input id="isActive" type="checkbox" checked><i></i><span><b>کاربر فعال باشد</b><small>کاربر غیرفعال فوراً از همه نشست‌ها خارج می‌شود.</small></span></label>
+      </div>
+      <p id="formError" class="error"></p>
+      <footer><button type="button" class="secondary" data-close>انصراف</button><button id="saveUser" class="primary" type="submit">ذخیره کاربر</button></footer>
+    </form>
+  </div>
+
+  <div id="credentialModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="backdrop" data-credential-close></div>
+    <section class="dialog credential-dialog">
+      <header><div><small>فقط همین یک‌بار نمایش داده می‌شود</small><h2>اطلاعات ورود فروشنده</h2></div><button type="button" class="close" data-credential-close>×</button></header>
+      <p>این اطلاعات را برای فروشنده کپی کنید. رمز در دیتابیس به‌صورت امن ذخیره شده و بعداً قابل دیدن نیست.</p>
+      <div class="credential-box" id="credentialText" dir="ltr"></div>
+      <footer><button id="copyCredentials" class="primary" type="button">کپی اطلاعات ورود</button></footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="/version.js?v=4312" defer></script>
+  <script src="./app.js?v=4312"></script>
+</body>
+</html>

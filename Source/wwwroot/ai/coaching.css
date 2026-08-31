@@ -1,0 +1,23 @@
+.cards{grid-template-columns:repeat(5,1fr)}
+.coaching-overview{padding:18px;margin-bottom:14px}
+.coach-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}
+.coach-metrics article{display:grid;gap:5px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.coach-metrics span{color:var(--muted);font-size:12px}.coach-metrics strong{font-size:25px}
+.coach-metrics .sensitive{border-right:4px solid var(--red);background:#fff7f7}
+.coach-overview-grid{display:grid;grid-template-columns:.8fr .8fr 1.4fr;gap:12px}
+.coach-overview-grid>article{padding:14px;border:1px solid var(--line);border-radius:12px}
+.coach-overview-grid h3,.coach-columns h4{margin:0 0 10px;font-size:13px}
+.rank-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.rank-list li{display:flex;justify-content:space-between;gap:8px;padding-bottom:7px;border-bottom:1px dashed var(--line)}
+.rank-list li:last-child{border:0}.rank-list b{color:var(--blue)}
+.coach-action{display:grid;gap:5px;padding:9px 10px;margin-bottom:7px;border-radius:9px;background:#f4f8fd;border-right:3px solid var(--blue)}
+.coach-action span{font-size:12px;line-height:1.75;color:#46556c}.coach-action small{color:var(--muted)}
+.coach-notice{margin:14px 0 0;padding:10px;border-radius:9px;background:#fff8e9;color:#76501c;line-height:1.8}
+.coaching-detail{display:grid;gap:10px}.coach-score{display:grid;gap:5px;padding:12px;border-radius:10px;background:#eef6ff;border:1px solid #cfe1f5}
+.coach-score strong{font-size:24px;color:var(--blue)}.coach-score small{color:var(--muted)}
+.coach-columns{display:grid;grid-template-columns:1fr 1.3fr;gap:10px}.coach-columns>div{border:1px solid var(--line);border-radius:10px;padding:11px}
+.coach-good{color:var(--green);margin:7px 0}.empty-coaching{padding:12px;border-radius:10px;background:var(--soft);color:var(--muted)}
+.recommendation{background:#eef7f1;border-radius:8px;padding:9px!important;color:#285f45}.recommendation b{color:var(--green)}
+@media(max-width:1200px){.cards{grid-template-columns:repeat(3,1fr)}.coach-overview-grid{grid-template-columns:1fr 1fr}.coach-overview-grid .priority{grid-column:1/-1}}
+@media(max-width:760px){.coach-metrics,.coach-overview-grid,.coach-columns{grid-template-columns:1fr 1fr}.coach-overview-grid .priority{grid-column:1/-1}}
+@media(max-width:520px){.cards,.coach-metrics,.coach-overview-grid,.coach-columns{grid-template-columns:1fr}.coach-overview-grid .priority{grid-column:auto}}

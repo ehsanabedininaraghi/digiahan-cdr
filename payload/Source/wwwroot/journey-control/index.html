@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>مرکز کنترل سفر مشتری | دیجی‌آهن</title>
+  <link rel="stylesheet" href="/journey-control/style.css?v=4.4.0">
+</head>
+<body>
+  <main>
+    <header class="topbar">
+      <div><p>DIGIAHAN JOURNEY CONTROL</p><h1>مرکز کنترل مشتری‌های در خطر</h1></div>
+      <nav><button id="refresh">تازه‌سازی</button><a href="/dashboard/index.html">داشبورد مدیریت</a></nav>
+    </header>
+    <section class="summary">
+      <div><span>موارد عبورکرده از SLA</span><strong id="exceptionCount">۰</strong></div>
+      <p>این صفحه فقط مواردی را نشان می‌دهد که اقدام بعدی‌شان از زمان تعهد عبور کرده است.</p>
+    </section>
+    <section class="panel">
+      <div id="message" class="message">در حال دریافت اطلاعات…</div>
+      <div class="table-wrap">
+        <table id="exceptionsTable" class="hidden">
+          <thead><tr><th>مشتری</th><th>مالک</th><th>کار</th><th>موعد</th><th>تأخیر</th><th>وضعیت</th></tr></thead>
+          <tbody id="exceptionsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/version.js?v=4.4.0"></script>
+  <script src="/journey-control/app.js?v=4.4.0"></script>
+</body>
+</html>

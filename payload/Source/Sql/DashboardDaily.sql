@@ -1,10 +1,10 @@
 ﻿WITH Raw AS
 (
     SELECT
-        r.*,
+        r.RawCDRId,r.LinkedId,r.UniqueId,r.ReceivedAtUtc,r.Src,r.Dst,r.Did,r.Dcontext,r.Disposition,r.Billsec,
         K=COALESCE(NULLIF(r.LinkedId,N''),NULLIF(r.UniqueId,N''),CONVERT(nvarchar(30),r.RawCDRId))
     FROM dbo.RawCDR r
-    WHERE r.Calldate>=@s AND r.Calldate<@e
+    WHERE r.ReceivedAtUtc>=@s AND r.ReceivedAtUtc<@e
 ),
 EligibleKeys AS
 (
@@ -16,7 +16,7 @@ C AS
 (
     SELECT
         r.K,
-        D=CONVERT(date,MIN(r.Calldate) OVER(PARTITION BY r.K)),
+        D=CONVERT(date,DATEADD(minute,210,MIN(r.ReceivedAtUtc) OVER(PARTITION BY r.K))),
         r.Disposition,r.Billsec,
         Dir=CASE
             WHEN NULLIF(r.Did,N'') IS NOT NULL OR r.Dcontext LIKE N'%from-trunk%' THEN N'in'
@@ -47,20 +47,25 @@ O AS
     FROM C
     GROUP BY K
 ),
-R AS
+N AS
 (
     SELECT
         O.*,
-        NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone),
-        HasContact=CASE WHEN M.IdentityId IS NULL THEN 0 ELSE 1 END
+        NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
     FROM O
-    OUTER APPLY
+),
+R AS
+(
+    SELECT
+        N.*,
+        HasContact=CASE WHEN P.NormalizedPhone IS NULL THEN 0 ELSE 1 END
+    FROM N
+    LEFT JOIN
     (
-        SELECT TOP(1) IdentityId,IsVerified
-        FROM dbo.CustomerPhoneDirectory
-        WHERE NormalizedPhone=dbo.NormalizeIranPhone(O.ExternalPhone)
-        ORDER BY IsVerified DESC,IdentityId
-    ) M
+        SELECT NormalizedPhone
+        FROM dbo.CustomerIdentityPhones
+        GROUP BY NormalizedPhone
+    ) P ON P.NormalizedPhone=N.NormalizedPhone
 )
 SELECT
     D,
@@ -74,4 +79,5 @@ SELECT
     SUM(B) AS B
 FROM R
 GROUP BY D
-ORDER BY D;
+ORDER BY D
+OPTION(RECOMPILE);

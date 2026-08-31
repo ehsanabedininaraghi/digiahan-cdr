@@ -7,6 +7,12 @@ public sealed record VoipRingEventRequest(
     string? Channel,
     DateTime? EventTimeUtc);
 
+public sealed record VoipCallStatusRequest(
+    string LinkedId,
+    string State,
+    string? Extension,
+    DateTime? EventTimeUtc);
+
 public sealed record AgentCustomerCard(
     string Extension,
     string CallerNumber,
@@ -31,8 +37,11 @@ public sealed record AgentCustomerCard(
     string SuggestedOpening,
     int? LastInvoiceDaysAgo,
     string IdentitySource,
-    string CustomerRankReason);
+    string CustomerRankReason,
+    decimal? AccountBalance,
+    decimal? CreditLimit);
 
 public sealed record AgentEventEnvelope(
     long Sequence,
+    DateTime PublishedAtUtc,
     AgentCustomerCard Card);

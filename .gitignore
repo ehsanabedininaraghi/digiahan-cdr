@@ -1,40 +1,40 @@
-# Build outputs
+# Build and generated outputs
 **/bin/
 **/obj/
 **/.vs/
 **/publish/
+artifacts/
+release/
+Logs/
 **/Logs/
+_backups/
+/.tmp-*
 *.user
 *.suo
+*.log
 
-# Secrets and machine-specific config
+# Secrets and machine-specific configuration
 Source/appsettings.json
-Source/appsettings.Development.json
+Source/appsettings.*.local.json
+**/appsettings.Development.json
 .env
 *.secrets.json
+
+# Runtime-owned mapping and local data
+Source/config/
+config-local/
+mappingfile.xlsx
 
 # Database backups
 *.bak
 *.trn
 
-# OS/editor
+# OS, editor, and language caches
 Thumbs.db
 .DS_Store
 .vscode/
 .idea/
-
-# Local accounting credentials
-Source/appsettings.Accounting.local.json
-
-Source/appsettings.Voip.local.json
-
-
-
-Source/appsettings.json
-**/appsettings.Development.json
-.env
-**/bin/
-**/obj/
-Logs/
-_backups/
-*.log
+.codex-pr-body.md
+**/__pycache__/
+*.pyc
+.dotnet-cli/

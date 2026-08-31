@@ -1,0 +1,2461 @@
+﻿{
+    "generated_at_utc":  "\/Date(1786190245617)\/",
+    "started_at_utc":  "\/Date(1786190242650)\/",
+    "mode":  "READ_ONLY_DISCOVERY",
+    "source_root":  "D:\\DigiAhan\\CDR4.0\\Source",
+    "connection":  {
+                       "data_source":  "lpc:localhost",
+                       "database":  "DigiAhan_CDR",
+                       "integrated_security":  true,
+                       "application_name":  "DigiAhan-AI-Sprint0-ReadOnly",
+                       "contains_password":  false
+                   },
+    "raw_cdr_columns":  [
+                            {
+                                "column_id":  1,
+                                "ColumnName":  "RawCDRId",
+                                "DataType":  "bigint",
+                                "MaxLength":  8,
+                                "NumericPrecision":  19,
+                                "NumericScale":  0,
+                                "IsNullable":  false
+                            },
+                            {
+                                "column_id":  2,
+                                "ColumnName":  "SourceServer",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  200,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  false
+                            },
+                            {
+                                "column_id":  3,
+                                "ColumnName":  "Calldate",
+                                "DataType":  "datetime2",
+                                "MaxLength":  6,
+                                "NumericPrecision":  19,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  4,
+                                "ColumnName":  "Clid",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  5,
+                                "ColumnName":  "Src",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  6,
+                                "ColumnName":  "Dst",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  7,
+                                "ColumnName":  "Dcontext",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  8,
+                                "ColumnName":  "Channel",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  9,
+                                "ColumnName":  "DstChannel",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  10,
+                                "ColumnName":  "LastApp",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  11,
+                                "ColumnName":  "LastData",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  12,
+                                "ColumnName":  "Duration",
+                                "DataType":  "int",
+                                "MaxLength":  4,
+                                "NumericPrecision":  10,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  13,
+                                "ColumnName":  "Billsec",
+                                "DataType":  "int",
+                                "MaxLength":  4,
+                                "NumericPrecision":  10,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  14,
+                                "ColumnName":  "Disposition",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  90,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  15,
+                                "ColumnName":  "Amaflags",
+                                "DataType":  "int",
+                                "MaxLength":  4,
+                                "NumericPrecision":  10,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  16,
+                                "ColumnName":  "AccountCode",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  17,
+                                "ColumnName":  "UniqueId",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  300,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  18,
+                                "ColumnName":  "UserField",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  19,
+                                "ColumnName":  "RecordingFile",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  1000,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  20,
+                                "ColumnName":  "Cnum",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  21,
+                                "ColumnName":  "Cnam",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  22,
+                                "ColumnName":  "OutboundCnum",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  23,
+                                "ColumnName":  "OutboundCnam",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  24,
+                                "ColumnName":  "DstCnam",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  25,
+                                "ColumnName":  "Did",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  26,
+                                "ColumnName":  "LinkedId",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  300,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  27,
+                                "ColumnName":  "PeerAccount",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  160,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  28,
+                                "ColumnName":  "Sequence",
+                                "DataType":  "int",
+                                "MaxLength":  4,
+                                "NumericPrecision":  10,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  29,
+                                "ColumnName":  "SourceRowKey",
+                                "DataType":  "nvarchar",
+                                "MaxLength":  510,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  30,
+                                "ColumnName":  "Fingerprint",
+                                "DataType":  "char",
+                                "MaxLength":  64,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  false
+                            },
+                            {
+                                "column_id":  31,
+                                "ColumnName":  "ReceivedAtUtc",
+                                "DataType":  "datetime2",
+                                "MaxLength":  6,
+                                "NumericPrecision":  19,
+                                "NumericScale":  0,
+                                "IsNullable":  false
+                            },
+                            {
+                                "column_id":  32,
+                                "ColumnName":  "BatchId",
+                                "DataType":  "uniqueidentifier",
+                                "MaxLength":  16,
+                                "NumericPrecision":  0,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            },
+                            {
+                                "column_id":  33,
+                                "ColumnName":  "SequenceNo",
+                                "DataType":  "int",
+                                "MaxLength":  4,
+                                "NumericPrecision":  10,
+                                "NumericScale":  0,
+                                "IsNullable":  true
+                            }
+                        ],
+    "raw_cdr_indexes":  [
+                            {
+                                "IndexName":  "PK_RawCDR",
+                                "IsPrimaryKey":  true,
+                                "IsUnique":  true,
+                                "KeyColumns":  "RawCDRId"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_Calldate",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "Calldate"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_Calldate_LinkedId",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "Calldate,LinkedId"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_LinkedId",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "LinkedId"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_ReceivedAtUtc",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "ReceivedAtUtc"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_Src_Dst",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "Src,Dst"
+                            },
+                            {
+                                "IndexName":  "IX_RawCDR_UniqueId",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  false,
+                                "KeyColumns":  "UniqueId"
+                            },
+                            {
+                                "IndexName":  "UX_RawCDR_Fingerprint",
+                                "IsPrimaryKey":  false,
+                                "IsUnique":  true,
+                                "KeyColumns":  "Fingerprint"
+                            }
+                        ],
+    "relevant_tables":  [
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "AccountingCustomers",
+                                "ApproximateRows":  1443
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "AccountingInvoiceItems",
+                                "ApproximateRows":  1206
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "AccountingInvoices",
+                                "ApproximateRows":  936
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "AccountingSyncRuns",
+                                "ApproximateRows":  557
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "AccountingVisitors",
+                                "ApproximateRows":  8
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerAccountingMappings",
+                                "ApproximateRows":  1442
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentities",
+                                "ApproximateRows":  9656
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentityAccountingLinks",
+                                "ApproximateRows":  55
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentityConflicts",
+                                "ApproximateRows":  0
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentityDidarLinks",
+                                "ApproximateRows":  9653
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentityManualMappings",
+                                "ApproximateRows":  64
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerIdentityPhones",
+                                "ApproximateRows":  13229
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerMappingImports",
+                                "ApproximateRows":  2
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "CustomerMappings",
+                                "ApproximateRows":  0
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarContactPhones",
+                                "ApproximateRows":  13141
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarContactPhones_Backup_20260729_141857",
+                                "ApproximateRows":  15237
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarContacts",
+                                "ApproximateRows":  9653
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarContacts_Backup_20260729_141857",
+                                "ApproximateRows":  9653
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarContacts_Stage",
+                                "ApproximateRows":  0
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "DidarSyncHistory",
+                                "ApproximateRows":  1
+                            },
+                            {
+                                "SchemaName":  "dbo",
+                                "TableName":  "RawCDR",
+                                "ApproximateRows":  7449
+                            }
+                        ],
+    "relevant_table_columns":  [
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  1,
+                                       "ColumnName":  "SourceDatabase",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  2,
+                                       "ColumnName":  "FiscalYear",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  3,
+                                       "ColumnName":  "DetailCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  4,
+                                       "ColumnName":  "ShortCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  5,
+                                       "ColumnName":  "CustomerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  6,
+                                       "ColumnName":  "ManagerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  7,
+                                       "ColumnName":  "EconomicCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  8,
+                                       "ColumnName":  "CustomerTel",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  9,
+                                       "ColumnName":  "CustomerAddress",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingCustomers",
+                                       "column_id":  10,
+                                       "ColumnName":  "ImportedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  1,
+                                       "ColumnName":  "SourceDatabase",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  2,
+                                       "ColumnName":  "FiscalYear",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  3,
+                                       "ColumnName":  "ItemCode",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  4,
+                                       "ColumnName":  "FactorCode",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  5,
+                                       "ColumnName":  "FactorDate",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  6,
+                                       "ColumnName":  "ItemRow",
+                                       "DataType":  "int",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  7,
+                                       "ColumnName":  "ProductCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  8,
+                                       "ColumnName":  "ProductName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  9,
+                                       "ColumnName":  "Description",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  10,
+                                       "ColumnName":  "Quantity",
+                                       "DataType":  "float",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  11,
+                                       "ColumnName":  "UnitPrice",
+                                       "DataType":  "decimal",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  12,
+                                       "ColumnName":  "TotalPrice",
+                                       "DataType":  "decimal",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoiceItems",
+                                       "column_id":  13,
+                                       "ColumnName":  "ImportedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  1,
+                                       "ColumnName":  "SourceDatabase",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  2,
+                                       "ColumnName":  "FiscalYear",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  3,
+                                       "ColumnName":  "FactorCode",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  4,
+                                       "ColumnName":  "DocumentNumber",
+                                       "DataType":  "decimal",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  5,
+                                       "ColumnName":  "FactorNumber",
+                                       "DataType":  "decimal",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  6,
+                                       "ColumnName":  "FactorDate",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  7,
+                                       "ColumnName":  "TypeIndex",
+                                       "DataType":  "int",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  8,
+                                       "ColumnName":  "TypeDescription",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  9,
+                                       "ColumnName":  "CustomerShortCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  10,
+                                       "ColumnName":  "CustomerDetailCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  11,
+                                       "ColumnName":  "CustomerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  12,
+                                       "ColumnName":  "Amount",
+                                       "DataType":  "decimal",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  13,
+                                       "ColumnName":  "VisitorId",
+                                       "DataType":  "int",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  14,
+                                       "ColumnName":  "VisitorName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  15,
+                                       "ColumnName":  "ImportedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "AccountingInvoices",
+                                       "column_id":  16,
+                                       "ColumnName":  "FactorDescription",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  1,
+                                       "ColumnName":  "IdentityId",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  2,
+                                       "ColumnName":  "DisplayName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  3,
+                                       "ColumnName":  "CompanyName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  4,
+                                       "ColumnName":  "OwnerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  5,
+                                       "ColumnName":  "CreatedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  6,
+                                       "ColumnName":  "UpdatedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentities",
+                                       "column_id":  7,
+                                       "ColumnName":  "PrimaryMobilePhoneId",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  1,
+                                       "ColumnName":  "Id",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  2,
+                                       "ColumnName":  "IdentityId",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  3,
+                                       "ColumnName":  "SourceDatabase",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  4,
+                                       "ColumnName":  "FiscalYear",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  5,
+                                       "ColumnName":  "DetailCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  6,
+                                       "ColumnName":  "ShortCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  7,
+                                       "ColumnName":  "CustomerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  8,
+                                       "ColumnName":  "IsVerified",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityAccountingLinks",
+                                       "column_id":  9,
+                                       "ColumnName":  "CreatedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityDidarLinks",
+                                       "column_id":  1,
+                                       "ColumnName":  "Id",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityDidarLinks",
+                                       "column_id":  2,
+                                       "ColumnName":  "IdentityId",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityDidarLinks",
+                                       "column_id":  3,
+                                       "ColumnName":  "DidarContactCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityDidarLinks",
+                                       "column_id":  4,
+                                       "ColumnName":  "IsVerified",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityDidarLinks",
+                                       "column_id":  5,
+                                       "ColumnName":  "CreatedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  1,
+                                       "ColumnName":  "Id",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  2,
+                                       "ColumnName":  "IdentityId",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  3,
+                                       "ColumnName":  "NormalizedPhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  4,
+                                       "ColumnName":  "RawPhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  5,
+                                       "ColumnName":  "PhoneType",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  6,
+                                       "ColumnName":  "SourceSystem",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  7,
+                                       "ColumnName":  "IsPrimary",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  8,
+                                       "ColumnName":  "IsVerified",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  9,
+                                       "ColumnName":  "Priority",
+                                       "DataType":  "int",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "CustomerIdentityPhones",
+                                       "column_id":  10,
+                                       "ColumnName":  "CreatedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  1,
+                                       "ColumnName":  "Id",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  2,
+                                       "ColumnName":  "DidarContactCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  3,
+                                       "ColumnName":  "OriginalPhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  4,
+                                       "ColumnName":  "NormalizedPhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  5,
+                                       "ColumnName":  "PhoneType",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  6,
+                                       "ColumnName":  "IsPrimary",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  7,
+                                       "ColumnName":  "CreatedAt",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  8,
+                                       "ColumnName":  "SourceColumn",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContactPhones",
+                                       "column_id":  9,
+                                       "ColumnName":  "LastSyncedAtUtc",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  1,
+                                       "ColumnName":  "Id",
+                                       "DataType":  "bigint",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  2,
+                                       "ColumnName":  "DidarContactCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  3,
+                                       "ColumnName":  "CustomerCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  4,
+                                       "ColumnName":  "CustomerTitle",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  5,
+                                       "ColumnName":  "FirstName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  6,
+                                       "ColumnName":  "LastName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  7,
+                                       "ColumnName":  "FullName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  8,
+                                       "ColumnName":  "Email",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  9,
+                                       "ColumnName":  "Fax",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  10,
+                                       "ColumnName":  "JobTitle",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  11,
+                                       "ColumnName":  "PostalCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  12,
+                                       "ColumnName":  "PersonDescription",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  13,
+                                       "ColumnName":  "MobilePhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  14,
+                                       "ColumnName":  "Province",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  15,
+                                       "ColumnName":  "County",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  16,
+                                       "ColumnName":  "LandlinePhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  17,
+                                       "ColumnName":  "CompanyPhone",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  18,
+                                       "ColumnName":  "CompanyName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  19,
+                                       "ColumnName":  "DidarCompanyCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  20,
+                                       "ColumnName":  "OwnerName",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  21,
+                                       "ColumnName":  "ViewPermission",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  22,
+                                       "ColumnName":  "NationalCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  23,
+                                       "ColumnName":  "CreatedDateText",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  24,
+                                       "ColumnName":  "BirthDateText",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  25,
+                                       "ColumnName":  "ContactGroups",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  26,
+                                       "ColumnName":  "OtherPhones",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  27,
+                                       "ColumnName":  "Address1",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  28,
+                                       "ColumnName":  "Websites",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  29,
+                                       "ColumnName":  "OtherEmails",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  30,
+                                       "ColumnName":  "JobTitle2",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  31,
+                                       "ColumnName":  "CallerOwner",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  32,
+                                       "ColumnName":  "Contractors",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  33,
+                                       "ColumnName":  "Phones2",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  34,
+                                       "ColumnName":  "CustomerAddress",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  35,
+                                       "ColumnName":  "SourceCode",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  36,
+                                       "ColumnName":  "City2",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  37,
+                                       "ColumnName":  "Website2",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  38,
+                                       "ColumnName":  "NewSource",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  39,
+                                       "ColumnName":  "RecordType",
+                                       "DataType":  "nvarchar",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  40,
+                                       "ColumnName":  "IsDeleted",
+                                       "DataType":  "bit",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  41,
+                                       "ColumnName":  "SourceHash",
+                                       "DataType":  "varbinary",
+                                       "IsNullable":  true
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  42,
+                                       "ColumnName":  "FirstImportedAt",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   },
+                                   {
+                                       "SchemaName":  "dbo",
+                                       "TableName":  "DidarContacts",
+                                       "column_id":  43,
+                                       "ColumnName":  "LastSyncedAt",
+                                       "DataType":  "datetime2",
+                                       "IsNullable":  false
+                                   }
+                               ],
+    "call_baseline":  {
+                          "RawRows":  7449,
+                          "EligibleCalls":  1241,
+                          "AnsweredCalls":  1101,
+                          "InboundCalls":  941,
+                          "OutboundCalls":  805,
+                          "UnknownDirectionCalls":  8,
+                          "CallsWithLinkedId":  1241,
+                          "CallsWithUniqueId":  1241,
+                          "CallsWithRecordingReference":  950,
+                          "CallsWithMultipleRecordingReferences":  0,
+                          "MultiLegCalls":  659,
+                          "CallsWithLegArrivalSpreadOver90s":  44,
+                          "MinCallDate":  "\/Date(1785154703000)\/",
+                          "MaxCallDate":  "\/Date(1786181321000)\/",
+                          "MaxReceivedAtUtc":  "\/Date(1786168750000)\/"
+                      },
+    "raw_row_baseline":  {
+                             "RawRows":  7449,
+                             "LinkedIdPopulated":  7449,
+                             "UniqueIdPopulated":  7449,
+                             "RecordingFilePopulated":  6918,
+                             "MinCalldate":  "\/Date(1785154703000)\/",
+                             "MaxCalldate":  "\/Date(1786181321000)\/",
+                             "MinReceivedAtUtc":  "\/Date(1785240999000)\/",
+                             "MaxReceivedAtUtc":  "\/Date(1786168750000)\/"
+                         },
+    "daily_calls":  [
+                        {
+                            "CallDate":  "\/Date(1785097800000)\/",
+                            "Calls":  28,
+                            "AnsweredCalls":  27,
+                            "TotalDurationSeconds":  862
+                        },
+                        {
+                            "CallDate":  "\/Date(1785184200000)\/",
+                            "Calls":  143,
+                            "AnsweredCalls":  124,
+                            "TotalDurationSeconds":  8959
+                        },
+                        {
+                            "CallDate":  "\/Date(1785270600000)\/",
+                            "Calls":  170,
+                            "AnsweredCalls":  136,
+                            "TotalDurationSeconds":  6621
+                        },
+                        {
+                            "CallDate":  "\/Date(1785357000000)\/",
+                            "Calls":  53,
+                            "AnsweredCalls":  51,
+                            "TotalDurationSeconds":  2365
+                        },
+                        {
+                            "CallDate":  "\/Date(1785443400000)\/",
+                            "Calls":  10,
+                            "AnsweredCalls":  9,
+                            "TotalDurationSeconds":  95
+                        },
+                        {
+                            "CallDate":  "\/Date(1785529800000)\/",
+                            "Calls":  182,
+                            "AnsweredCalls":  162,
+                            "TotalDurationSeconds":  7683
+                        },
+                        {
+                            "CallDate":  "\/Date(1785616200000)\/",
+                            "Calls":  186,
+                            "AnsweredCalls":  166,
+                            "TotalDurationSeconds":  6159
+                        },
+                        {
+                            "CallDate":  "\/Date(1785702600000)\/",
+                            "Calls":  173,
+                            "AnsweredCalls":  156,
+                            "TotalDurationSeconds":  8038
+                        },
+                        {
+                            "CallDate":  "\/Date(1785789000000)\/",
+                            "Calls":  6,
+                            "AnsweredCalls":  5,
+                            "TotalDurationSeconds":  57
+                        },
+                        {
+                            "CallDate":  "\/Date(1785875400000)\/",
+                            "Calls":  161,
+                            "AnsweredCalls":  130,
+                            "TotalDurationSeconds":  5012
+                        },
+                        {
+                            "CallDate":  "\/Date(1785961800000)\/",
+                            "Calls":  52,
+                            "AnsweredCalls":  46,
+                            "TotalDurationSeconds":  1879
+                        },
+                        {
+                            "CallDate":  "\/Date(1786048200000)\/",
+                            "Calls":  3,
+                            "AnsweredCalls":  2,
+                            "TotalDurationSeconds":  47
+                        },
+                        {
+                            "CallDate":  "\/Date(1786134600000)\/",
+                            "Calls":  74,
+                            "AnsweredCalls":  58,
+                            "TotalDurationSeconds":  2313
+                        }
+                    ],
+    "hourly_calls":  [
+                         {
+                             "HourOfDay":  0,
+                             "Calls":  2,
+                             "ActiveDates":  2,
+                             "CallsPerActiveDay":  1.0000000000000
+                         },
+                         {
+                             "HourOfDay":  3,
+                             "Calls":  1,
+                             "ActiveDates":  1,
+                             "CallsPerActiveDay":  1.0000000000000
+                         },
+                         {
+                             "HourOfDay":  7,
+                             "Calls":  2,
+                             "ActiveDates":  2,
+                             "CallsPerActiveDay":  1.0000000000000
+                         },
+                         {
+                             "HourOfDay":  8,
+                             "Calls":  25,
+                             "ActiveDates":  8,
+                             "CallsPerActiveDay":  3.1250000000000
+                         },
+                         {
+                             "HourOfDay":  9,
+                             "Calls":  83,
+                             "ActiveDates":  9,
+                             "CallsPerActiveDay":  9.2222222222222
+                         },
+                         {
+                             "HourOfDay":  10,
+                             "Calls":  183,
+                             "ActiveDates":  10,
+                             "CallsPerActiveDay":  18.3000000000000
+                         },
+                         {
+                             "HourOfDay":  11,
+                             "Calls":  191,
+                             "ActiveDates":  10,
+                             "CallsPerActiveDay":  19.1000000000000
+                         },
+                         {
+                             "HourOfDay":  12,
+                             "Calls":  234,
+                             "ActiveDates":  10,
+                             "CallsPerActiveDay":  23.4000000000000
+                         },
+                         {
+                             "HourOfDay":  13,
+                             "Calls":  169,
+                             "ActiveDates":  8,
+                             "CallsPerActiveDay":  21.1250000000000
+                         },
+                         {
+                             "HourOfDay":  14,
+                             "Calls":  126,
+                             "ActiveDates":  7,
+                             "CallsPerActiveDay":  18.0000000000000
+                         },
+                         {
+                             "HourOfDay":  15,
+                             "Calls":  104,
+                             "ActiveDates":  9,
+                             "CallsPerActiveDay":  11.5555555555555
+                         },
+                         {
+                             "HourOfDay":  16,
+                             "Calls":  53,
+                             "ActiveDates":  7,
+                             "CallsPerActiveDay":  7.5714285714285
+                         },
+                         {
+                             "HourOfDay":  17,
+                             "Calls":  27,
+                             "ActiveDates":  8,
+                             "CallsPerActiveDay":  3.3750000000000
+                         },
+                         {
+                             "HourOfDay":  18,
+                             "Calls":  14,
+                             "ActiveDates":  10,
+                             "CallsPerActiveDay":  1.4000000000000
+                         },
+                         {
+                             "HourOfDay":  19,
+                             "Calls":  11,
+                             "ActiveDates":  6,
+                             "CallsPerActiveDay":  1.8333333333333
+                         },
+                         {
+                             "HourOfDay":  20,
+                             "Calls":  4,
+                             "ActiveDates":  2,
+                             "CallsPerActiveDay":  2.0000000000000
+                         },
+                         {
+                             "HourOfDay":  21,
+                             "Calls":  2,
+                             "ActiveDates":  2,
+                             "CallsPerActiveDay":  1.0000000000000
+                         },
+                         {
+                             "HourOfDay":  22,
+                             "Calls":  8,
+                             "ActiveDates":  4,
+                             "CallsPerActiveDay":  2.0000000000000
+                         },
+                         {
+                             "HourOfDay":  23,
+                             "Calls":  2,
+                             "ActiveDates":  1,
+                             "CallsPerActiveDay":  2.0000000000000
+                         }
+                     ],
+    "duration_percentiles_seconds":  {
+                                         "P50":  24,
+                                         "P95":  134,
+                                         "P99":  244.59999999999945
+                                     },
+    "completed_calls_per_nonempty_5m_bucket":  {
+                                                   "NonEmptyBucketCount":  556,
+                                                   "P50":  2,
+                                                   "P95":  5,
+                                                   "P99":  6,
+                                                   "Maximum":  8
+                                               },
+    "top_extensions":  [
+                           {
+                               "Extension":  "UNKNOWN",
+                               "Calls":  410,
+                               "TotalDurationSeconds":  4138
+                           },
+                           {
+                               "Extension":  "400",
+                               "Calls":  389,
+                               "TotalDurationSeconds":  19202
+                           },
+                           {
+                               "Extension":  "213",
+                               "Calls":  90,
+                               "TotalDurationSeconds":  6999
+                           },
+                           {
+                               "Extension":  "401",
+                               "Calls":  83,
+                               "TotalDurationSeconds":  5719
+                           },
+                           {
+                               "Extension":  "403",
+                               "Calls":  52,
+                               "TotalDurationSeconds":  3476
+                           },
+                           {
+                               "Extension":  "203",
+                               "Calls":  39,
+                               "TotalDurationSeconds":  2531
+                           },
+                           {
+                               "Extension":  "404",
+                               "Calls":  37,
+                               "TotalDurationSeconds":  1993
+                           },
+                           {
+                               "Extension":  "207",
+                               "Calls":  17,
+                               "TotalDurationSeconds":  732
+                           },
+                           {
+                               "Extension":  "211",
+                               "Calls":  14,
+                               "TotalDurationSeconds":  491
+                           },
+                           {
+                               "Extension":  "201",
+                               "Calls":  13,
+                               "TotalDurationSeconds":  505
+                           },
+                           {
+                               "Extension":  "219",
+                               "Calls":  11,
+                               "TotalDurationSeconds":  651
+                           },
+                           {
+                               "Extension":  "220",
+                               "Calls":  11,
+                               "TotalDurationSeconds":  304
+                           },
+                           {
+                               "Extension":  "215",
+                               "Calls":  10,
+                               "TotalDurationSeconds":  655
+                           },
+                           {
+                               "Extension":  "221",
+                               "Calls":  10,
+                               "TotalDurationSeconds":  491
+                           },
+                           {
+                               "Extension":  "225",
+                               "Calls":  10,
+                               "TotalDurationSeconds":  207
+                           },
+                           {
+                               "Extension":  "205",
+                               "Calls":  9,
+                               "TotalDurationSeconds":  204
+                           },
+                           {
+                               "Extension":  "217",
+                               "Calls":  9,
+                               "TotalDurationSeconds":  540
+                           },
+                           {
+                               "Extension":  "216",
+                               "Calls":  4,
+                               "TotalDurationSeconds":  103
+                           },
+                           {
+                               "Extension":  "222",
+                               "Calls":  4,
+                               "TotalDurationSeconds":  100
+                           },
+                           {
+                               "Extension":  "202",
+                               "Calls":  3,
+                               "TotalDurationSeconds":  98
+                           },
+                           {
+                               "Extension":  "208",
+                               "Calls":  3,
+                               "TotalDurationSeconds":  129
+                           },
+                           {
+                               "Extension":  "214",
+                               "Calls":  3,
+                               "TotalDurationSeconds":  332
+                           },
+                           {
+                               "Extension":  "223",
+                               "Calls":  3,
+                               "TotalDurationSeconds":  137
+                           },
+                           {
+                               "Extension":  "218",
+                               "Calls":  2,
+                               "TotalDurationSeconds":  103
+                           },
+                           {
+                               "Extension":  "300",
+                               "Calls":  2,
+                               "TotalDurationSeconds":  51
+                           }
+                       ],
+    "direction_distribution":  [
+                                   {
+                                       "Direction":  "inbound",
+                                       "Calls":  941
+                                   },
+                                   {
+                                       "Direction":  "outbound",
+                                       "Calls":  292
+                                   },
+                                   {
+                                       "Direction":  "unknown",
+                                       "Calls":  8
+                                   }
+                               ],
+    "recording_path_kinds":  [
+                                 {
+                                     "PathKind":  "RELATIVE_OR_FILENAME",
+                                     "Files":  6918
+                                 },
+                                 {
+                                     "PathKind":  "MISSING",
+                                     "Files":  531
+                                 }
+                             ],
+    "recording_extensions":  [
+                                 {
+                                     "Extension":  ".wav",
+                                     "Files":  6918
+                                 },
+                                 {
+                                     "Extension":  "(missing)",
+                                     "Files":  531
+                                 }
+                             ],
+    "masked_recent_samples":  [
+                                  {
+                                      "RawCDRId":  17360,
+                                      "Calldate":  "\/Date(1786181321000)\/",
+                                      "MaskedSrc":  "***",
+                                      "MaskedDst":  "***02",
+                                      "Direction":  "outbound",
+                                      "Duration":  0,
+                                      "Billsec":  0,
+                                      "Disposition":  "FAILED",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  false,
+                                      "RecordingExtension":  null
+                                  },
+                                  {
+                                      "RawCDRId":  17359,
+                                      "Calldate":  "\/Date(1786181314000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  0,
+                                      "Billsec":  0,
+                                      "Disposition":  "BUSY",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17358,
+                                      "Calldate":  "\/Date(1786181313000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  8,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17357,
+                                      "Calldate":  "\/Date(1786181313000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  8,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17356,
+                                      "Calldate":  "\/Date(1786181313000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  8,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17355,
+                                      "Calldate":  "\/Date(1786181313000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  0,
+                                      "Billsec":  0,
+                                      "Disposition":  "BUSY",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17354,
+                                      "Calldate":  "\/Date(1786181313000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  8,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17353,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "inbound",
+                                      "Duration":  4,
+                                      "Billsec":  4,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17352,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  4,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17351,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  4,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17350,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  4,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17349,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  4,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17348,
+                                      "Calldate":  "\/Date(1786181266000)\/",
+                                      "MaskedSrc":  "55****59",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  4,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17347,
+                                      "Calldate":  "\/Date(1786180999000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  25,
+                                      "Billsec":  25,
+                                      "Disposition":  "ANSWERED",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17346,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "inbound",
+                                      "Duration":  7,
+                                      "Billsec":  7,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17345,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  7,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17344,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "inbound",
+                                      "Duration":  7,
+                                      "Billsec":  7,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17343,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  7,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17342,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "inbound",
+                                      "Duration":  7,
+                                      "Billsec":  7,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  },
+                                  {
+                                      "RawCDRId":  17341,
+                                      "Calldate":  "\/Date(1786180992000)\/",
+                                      "MaskedSrc":  "77****00",
+                                      "MaskedDst":  "***",
+                                      "Direction":  "outbound",
+                                      "Duration":  7,
+                                      "Billsec":  0,
+                                      "Disposition":  "NO ANSWER",
+                                      "HasLinkedId":  true,
+                                      "HasUniqueId":  true,
+                                      "HasRecordingFile":  true,
+                                      "RecordingExtension":  ".wav"
+                                  }
+                              ],
+    "leg_count_distribution":  [
+                                   {
+                                       "LegCount":  1,
+                                       "Calls":  582
+                                   },
+                                   {
+                                       "LegCount":  2,
+                                       "Calls":  85
+                                   },
+                                   {
+                                       "LegCount":  3,
+                                       "Calls":  12
+                                   },
+                                   {
+                                       "LegCount":  4,
+                                       "Calls":  7
+                                   },
+                                   {
+                                       "LegCount":  5,
+                                       "Calls":  47
+                                   },
+                                   {
+                                       "LegCount":  6,
+                                       "Calls":  84
+                                   },
+                                   {
+                                       "LegCount":  7,
+                                       "Calls":  23
+                                   },
+                                   {
+                                       "LegCount":  8,
+                                       "Calls":  48
+                                   },
+                                   {
+                                       "LegCount":  9,
+                                       "Calls":  27
+                                   },
+                                   {
+                                       "LegCount":  10,
+                                       "Calls":  7
+                                   },
+                                   {
+                                       "LegCount":  11,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  12,
+                                       "Calls":  157
+                                   },
+                                   {
+                                       "LegCount":  13,
+                                       "Calls":  72
+                                   },
+                                   {
+                                       "LegCount":  14,
+                                       "Calls":  21
+                                   },
+                                   {
+                                       "LegCount":  15,
+                                       "Calls":  9
+                                   },
+                                   {
+                                       "LegCount":  16,
+                                       "Calls":  10
+                                   },
+                                   {
+                                       "LegCount":  17,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  18,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  19,
+                                       "Calls":  5
+                                   },
+                                   {
+                                       "LegCount":  20,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  21,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  24,
+                                       "Calls":  11
+                                   },
+                                   {
+                                       "LegCount":  25,
+                                       "Calls":  6
+                                   },
+                                   {
+                                       "LegCount":  28,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  30,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  31,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  36,
+                                       "Calls":  4
+                                   },
+                                   {
+                                       "LegCount":  46,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  48,
+                                       "Calls":  2
+                                   },
+                                   {
+                                       "LegCount":  52,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  60,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  65,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  72,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  84,
+                                       "Calls":  1
+                                   },
+                                   {
+                                       "LegCount":  96,
+                                       "Calls":  2
+                                   }
+                               ],
+    "multi_leg_examples":  [
+                               {
+                                   "CallKey":  "linked:1785334377.256691",
+                                   "LegCount":  96,
+                                   "FirstCallDate":  "\/Date(1785334377000)\/",
+                                   "LastCallDate":  "\/Date(1785334617000)\/",
+                                   "ArrivalSpreadSeconds":  60
+                               },
+                               {
+                                   "CallKey":  "linked:1785903913.298794",
+                                   "LegCount":  96,
+                                   "FirstCallDate":  "\/Date(1785903913000)\/",
+                                   "LastCallDate":  "\/Date(1785904154000)\/",
+                                   "ArrivalSpreadSeconds":  4
+                               },
+                               {
+                                   "CallKey":  "linked:1785386274.258291",
+                                   "LegCount":  84,
+                                   "FirstCallDate":  "\/Date(1785386274000)\/",
+                                   "LastCallDate":  "\/Date(1785386493000)\/",
+                                   "ArrivalSpreadSeconds":  60
+                               },
+                               {
+                                   "CallKey":  "linked:1785337368.257757",
+                                   "LegCount":  72,
+                                   "FirstCallDate":  "\/Date(1785337368000)\/",
+                                   "LastCallDate":  "\/Date(1785337554000)\/",
+                                   "ArrivalSpreadSeconds":  60
+                               },
+                               {
+                                   "CallKey":  "linked:1786008349.312627",
+                                   "LegCount":  65,
+                                   "FirstCallDate":  "\/Date(1786008358000)\/",
+                                   "LastCallDate":  "\/Date(1786008442000)\/",
+                                   "ArrivalSpreadSeconds":  120
+                               },
+                               {
+                                   "CallKey":  "linked:1785402129.262610",
+                                   "LegCount":  60,
+                                   "FirstCallDate":  "\/Date(1785402129000)\/",
+                                   "LastCallDate":  "\/Date(1785402260000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785224832.238357",
+                                   "LegCount":  52,
+                                   "FirstCallDate":  "\/Date(1785224832000)\/",
+                                   "LastCallDate":  "\/Date(1785224898000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785157117.236186",
+                                   "LegCount":  48,
+                                   "FirstCallDate":  "\/Date(1785157117000)\/",
+                                   "LastCallDate":  "\/Date(1785157227000)\/",
+                                   "ArrivalSpreadSeconds":  17
+                               },
+                               {
+                                   "CallKey":  "linked:1785249957.246175",
+                                   "LegCount":  48,
+                                   "FirstCallDate":  "\/Date(1785249957000)\/",
+                                   "LastCallDate":  "\/Date(1785250076000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1786008229.312336",
+                                   "LegCount":  46,
+                                   "FirstCallDate":  "\/Date(1786008250000)\/",
+                                   "LastCallDate":  "\/Date(1786008472000)\/",
+                                   "ArrivalSpreadSeconds":  240
+                               },
+                               {
+                                   "CallKey":  "linked:1785435016.263878",
+                                   "LegCount":  36,
+                                   "FirstCallDate":  "\/Date(1785435016000)\/",
+                                   "LastCallDate":  "\/Date(1785435099000)\/",
+                                   "ArrivalSpreadSeconds":  60
+                               },
+                               {
+                                   "CallKey":  "linked:1785177413.237118",
+                                   "LegCount":  36,
+                                   "FirstCallDate":  "\/Date(1785177413000)\/",
+                                   "LastCallDate":  "\/Date(1785177478000)\/",
+                                   "ArrivalSpreadSeconds":  59
+                               },
+                               {
+                                   "CallKey":  "linked:1785158704.236592",
+                                   "LegCount":  36,
+                                   "FirstCallDate":  "\/Date(1785158704000)\/",
+                                   "LastCallDate":  "\/Date(1785158771000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785424551.263410",
+                                   "LegCount":  36,
+                                   "FirstCallDate":  "\/Date(1785424551000)\/",
+                                   "LastCallDate":  "\/Date(1785424645000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785590070.276145",
+                                   "LegCount":  31,
+                                   "FirstCallDate":  "\/Date(1785590076000)\/",
+                                   "LastCallDate":  "\/Date(1785590139000)\/",
+                                   "ArrivalSpreadSeconds":  60
+                               },
+                               {
+                                   "CallKey":  "linked:1785744249.289441",
+                                   "LegCount":  31,
+                                   "FirstCallDate":  "\/Date(1785744249000)\/",
+                                   "LastCallDate":  "\/Date(1785744271000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785324876.256160",
+                                   "LegCount":  30,
+                                   "FirstCallDate":  "\/Date(1785324876000)\/",
+                                   "LastCallDate":  "\/Date(1785324911000)\/",
+                                   "ArrivalSpreadSeconds":  50
+                               },
+                               {
+                                   "CallKey":  "linked:1785235570.244106",
+                                   "LegCount":  30,
+                                   "FirstCallDate":  "\/Date(1785235570000)\/",
+                                   "LastCallDate":  "\/Date(1785235592000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785224822.238287",
+                                   "LegCount":  28,
+                                   "FirstCallDate":  "\/Date(1785224822000)\/",
+                                   "LastCallDate":  "\/Date(1785224900000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785677748.287155",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785677759000)\/",
+                                   "LastCallDate":  "\/Date(1785677816000)\/",
+                                   "ArrivalSpreadSeconds":  61
+                               },
+                               {
+                                   "CallKey":  "linked:1785591204.276871",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785591204000)\/",
+                                   "LastCallDate":  "\/Date(1785591262000)\/",
+                                   "ArrivalSpreadSeconds":  1
+                               },
+                               {
+                                   "CallKey":  "linked:1785228327.240583",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785228327000)\/",
+                                   "LastCallDate":  "\/Date(1785228393000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785322806.254670",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785322806000)\/",
+                                   "LastCallDate":  "\/Date(1785322853000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785401074.262344",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785401074000)\/",
+                                   "LastCallDate":  "\/Date(1785401119000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               },
+                               {
+                                   "CallKey":  "linked:1785568853.265028",
+                                   "LegCount":  25,
+                                   "FirstCallDate":  "\/Date(1785568853000)\/",
+                                   "LastCallDate":  "\/Date(1785568892000)\/",
+                                   "ArrivalSpreadSeconds":  0
+                               }
+                           ],
+    "runtime_tools":  {
+                          "collected_at_utc":  "\/Date(1786190243247)\/",
+                          "dotnet_available":  true,
+                          "python_launcher_present":  true,
+                          "python_runtime_verified":  false,
+                          "ffmpeg_available":  false,
+                          "ffprobe_available":  false,
+                          "docker_available":  false,
+                          "nvidia_smi_available":  false,
+                          "python_version":  null
+                      },
+    "limitations":  [
+                        "Recording reachability is not inferred from a Linux path stored in SQL.",
+                        "Audio metadata requires an approved readable recording and ffprobe.",
+                        "Five-minute percentiles use non-empty working-hour buckets; zero buckets are excluded and explicitly labeled.",
+                        "Direction and answered-extension rules mirror the existing dashboard SQL and require business validation."
+                    ]
+}
