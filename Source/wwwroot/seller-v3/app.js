@@ -5,6 +5,17 @@ const state = { workspace: null, selected: null, searchTimer: null };
 const faNumber = new Intl.NumberFormat("fa-IR");
 const faDate = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "medium", timeStyle: "short" });
 
+function idempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 async function api(url, options = {}) {
   const response = await fetch(url, {
     credentials: "same-origin",
@@ -232,7 +243,7 @@ async function saveLead() {
   try {
     if (!$("leadIdentityId").value) throw new Error("یک مشتری را از نتیجه جست‌وجو انتخاب کنید.");
     const payload = {
-      idempotencyKey: crypto.randomUUID(), identityId: Number($("leadIdentityId").value),
+      idempotencyKey: idempotencyKey(), identityId: Number($("leadIdentityId").value),
       title: $("leadTitle").value, productSummary: $("leadProduct").value || null,
       priority: Number($("leadPriority").value), nextActionType: $("leadAction").value,
       nextActionAtUtc: isoValue("leadNextAt"), note: $("leadNote").value || null
@@ -259,7 +270,7 @@ async function saveOpportunity() {
   try {
     const numberOrNull = (id) => $(id).value === "" ? null : Number($(id).value);
     const payload = {
-      idempotencyKey: crypto.randomUUID(), title: $("qualifyTitle").value,
+      idempotencyKey: idempotencyKey(), title: $("qualifyTitle").value,
       productSummary: $("qualifyProduct").value || null, quantity: numberOrNull("qualifyQuantity"),
       quantityUnit: $("qualifyUnit").value || null, estimatedAmount: numberOrNull("qualifyAmount"),
       nextActionType: $("qualifyAction").value, nextActionAtUtc: isoValue("qualifyNextAt"),
@@ -290,7 +301,7 @@ async function saveStage() {
   try {
     const stage = $("stageValue").value;
     const payload = {
-      idempotencyKey: crypto.randomUUID(), stage,
+      idempotencyKey: idempotencyKey(), stage,
       nextActionType: ["WON", "LOST"].includes(stage) ? "CLOSED" : $("stageAction").value,
       nextActionAtUtc: ["WON", "LOST"].includes(stage) ? null : isoValue("stageNextAt"),
       lostReason: stage === "LOST" ? $("stageLostReason").value : null,
@@ -309,7 +320,7 @@ function openCompleteDialog(id) {
 async function completeWorkItem() {
   $("completeError").textContent = "";
   try {
-    const payload = { idempotencyKey: crypto.randomUUID(), outcome: $("completeOutcome").value, note: $("completeNote").value || null };
+    const payload = { idempotencyKey: idempotencyKey(), outcome: $("completeOutcome").value, note: $("completeNote").value || null };
     await api(`/api/seller-v3/work-items/${$("completeWorkItemId").value}/complete`, { method: "POST", body: JSON.stringify(payload) });
     $("completeDialog").close(); toast("نتیجه ثبت شد و اقدام بعدی کنترل شد."); clearFocus(); await loadWorkspace(true);
   } catch (error) { $("completeError").textContent = error.message; }
