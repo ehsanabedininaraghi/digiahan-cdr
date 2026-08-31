@@ -16,6 +16,7 @@ $relativeFiles = @(
     'Sql\DashboardCallsCount.sql', 'Sql\DashboardCallsPage.sql',
     'wwwroot\dashboard\app.js', 'wwwroot\dashboard\index.html', 'wwwroot\dashboard\style.css',
     'wwwroot\sms-dashboard\app.js', 'wwwroot\sms-dashboard\index.html', 'wwwroot\sms-dashboard\style.css',
+    'wwwroot\sales-next\app.js', 'wwwroot\sales-next\index.html', 'wwwroot\sales-next\style.css',
     'wwwroot\seller-v2\app.js', 'wwwroot\seller-v2\style.css', 'wwwroot\seller-v2\enhancements.css',
     'wwwroot\seller-v2\balance.css', 'wwwroot\seller-v2\index.html',
     'wwwroot\version.js'
